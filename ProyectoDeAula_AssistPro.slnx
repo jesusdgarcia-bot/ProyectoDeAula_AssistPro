@@ -1,3 +1,6 @@
 <Solution>
+  <Project Path="Entidades/Entidades.csproj" Id="ea9f3c23-73e1-4a1f-995f-00a20c67ca2d" />
+  <Project Path="Logica/Logica.csproj" Id="81913f4e-8d51-4ceb-ace4-54cbc07c881c" />
+  <Project Path="Persistencia/Persistencia.csproj" Id="609b6263-f1c2-481a-9c3a-6e01fa0cd0b3" />
   <Project Path="WindowsForms_Presentacion/WindowsForms_Presentacion.csproj" Id="24f7a7d9-c0ed-4daf-9dbc-3db10f967a8a" />
 </Solution>

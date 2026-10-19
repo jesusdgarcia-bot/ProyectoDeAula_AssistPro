@@ -47,7 +47,19 @@
     <Reference Include="System.Xml"/>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
+    <Compile Include="Cargo.cs" />
+    <Compile Include="Departamento.cs" />
+    <Compile Include="DispositivoBiometrico.cs" />
+    <Compile Include="Empleado.cs" />
+    <Compile Include="EmpleadoHorario.cs" />
+    <Compile Include="Horario.cs" />
+    <Compile Include="Novedad.cs" />
+    <Compile Include="PlantillaBiometrica.cs" />
+    <Compile Include="RegistroAsistencia.cs" />
+    <Compile Include="Rol.cs" />
+    <Compile Include="Sede.cs" />
+    <Compile Include="TipoNovedad.cs" />
+    <Compile Include="Usuario.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

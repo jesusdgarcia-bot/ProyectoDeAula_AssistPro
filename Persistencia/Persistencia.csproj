@@ -40,6 +40,7 @@
     
     <Reference Include="Microsoft.CSharp"/>
     
+    <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Data"/>
     
     <Reference Include="System.Net.Http"/>
@@ -47,8 +48,40 @@
     <Reference Include="System.Xml"/>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
+    <Compile Include="AssistProContext.cs" />
+    <Compile Include="OracleDbConfiguration.cs" />
+    <Compile Include="Migrations\Configuration.cs" />
+    <Compile Include="Migrations\202610190147438_InitialCreate.cs" />
+    <Compile Include="Migrations\202610190147438_InitialCreate.Designer.cs">
+      <DependentUpon>202610190147438_InitialCreate.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Configuraciones\CargoConfiguracion.cs" />
+    <Compile Include="Configuraciones\DepartamentoConfiguracion.cs" />
+    <Compile Include="Configuraciones\DispositivoBiometricoConfiguracion.cs" />
+    <Compile Include="Configuraciones\EmpleadoConfiguracion.cs" />
+    <Compile Include="Configuraciones\EmpleadoHorarioConfiguracion.cs" />
+    <Compile Include="Configuraciones\ExtensionesConfiguracion.cs" />
+    <Compile Include="Configuraciones\HorarioConfiguracion.cs" />
+    <Compile Include="Configuraciones\NovedadConfiguracion.cs" />
+    <Compile Include="Configuraciones\PlantillaBiometricaConfiguracion.cs" />
+    <Compile Include="Configuraciones\RegistroAsistenciaConfiguracion.cs" />
+    <Compile Include="Configuraciones\RolConfiguracion.cs" />
+    <Compile Include="Configuraciones\SedeConfiguracion.cs" />
+    <Compile Include="Configuraciones\TipoNovedadConfiguracion.cs" />
+    <Compile Include="Configuraciones\UsuarioConfiguracion.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\202610190147438_InitialCreate.resx">
+      <DependentUpon>202610190147438_InitialCreate.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="EntityFramework" Version="6.5.1" />
+    <PackageReference Include="Oracle.ManagedDataAccess.EntityFramework" Version="21.23.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Entidades\Entidades.csproj" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
  </Project>
