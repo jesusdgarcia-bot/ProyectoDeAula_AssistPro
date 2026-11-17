@@ -3,6 +3,21 @@
 Sistema de asistencia con biometría. .NET Framework 4.8 (WinForms) en capas
 `Entidades` / `Persistencia` / `Logica` / `WindowsForms_Presentacion`, sobre **Oracle XE 18c**.
 
+## Probar la aplicación con datos de ejemplo
+
+Compila la solución en configuración Debug y ejecuta este comando en PowerShell desde la carpeta del proyecto.
+
+```powershell
+.\WindowsForms_Presentacion\bin\Debug\WindowsForms_Presentacion.exe --demo
+```
+
+| Perfil de acceso | Usuario de prueba | Contraseña de prueba |
+| --- | --- | --- |
+| Empleado | `demo` | `AssistProDemo26!` |
+| Administrador | `admin` | `AssistProAdmin26!` |
+
+El perfil Empleado abre **Mi asistencia**. El perfil Administrador abre un panel de consulta con los módulos **Asistencia**, **Empleados** y **Usuarios**. El arranque normal usa Oracle y comprueba el rol guardado en la cuenta. Los roles `Administrador` y `Admin` corresponden al perfil Administrador.
+
 ## Base de datos (Entity Framework 6 Code-First + Migraciones)
 
 - Las entidades (POCO) están en `Entidades/`.

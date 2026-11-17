@@ -12,11 +12,12 @@ namespace WindowsForms_Presentacion
         /// Punto de entrada principal para la aplicación.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Form1());
+            bool modoDemostracion = args.Length == 1 && args[0] == "--demo";
+            Application.Run(modoDemostracion ? DatosDemostracion.CrearFormulario() : new Form1());
         }
     }
 }
