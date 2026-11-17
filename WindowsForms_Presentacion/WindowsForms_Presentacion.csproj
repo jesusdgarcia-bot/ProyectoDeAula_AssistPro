@@ -46,7 +46,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DatosDemostracion.cs" />
+    <Compile Include="EditorRegistro.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -54,6 +56,12 @@
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
     <Compile Include="FrmAdministrador.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmAdministrador.Catalogos.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmAdministrador.Operaciones.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Program.cs" />
@@ -89,4 +97,13 @@
     <ProjectReference Include="..\Persistencia\Persistencia.csproj" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-<ItemGroup><Reference Include="System.Configuration" /><ProjectReference Include="..\Logica\Logica.csproj" /></ItemGroup><ItemGroup><Compile Include="FrmPrincipal.cs"><SubType>Form</SubType></Compile></ItemGroup></Project>
+  <ItemGroup>
+    <Reference Include="System.Configuration" />
+    <ProjectReference Include="..\Logica\Logica.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="FrmPrincipal.cs">
+      <SubType>Form</SubType>
+    </Compile>
+  </ItemGroup>
+</Project>

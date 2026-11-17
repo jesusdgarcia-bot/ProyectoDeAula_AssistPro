@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WindowsForms_Presentacion
@@ -22,7 +21,6 @@ namespace WindowsForms_Presentacion
         private readonly Logica.ServicioAutenticacion autenticacion;
         private readonly Logica.IConsultaAsistencia consultaAsistencia;
         private readonly Logica.IConsultaAdministracion consultaAdministracion;
-        private readonly Func<Logica.SesionUsuario, Task<int>> cargarDatosPrueba;
         private bool autenticando;
         public Logica.SesionUsuario SesionActual { get; private set; }
         private static string EstadoActivo => System.Configuration.ConfigurationManager.AppSettings["EstadoActivo"] ?? "A";
@@ -34,19 +32,16 @@ namespace WindowsForms_Presentacion
         }
 
         public Form1(Logica.ServicioAutenticacion autenticacion)
-            : this(autenticacion, new Persistencia.ConsultaAsistencia(), new Persistencia.ConsultaAdministracion(),
-                new Persistencia.CargaDatosPrueba(EstadoActivo).CargarAsync)
+            : this(autenticacion, new Persistencia.ConsultaAsistencia(), new Persistencia.ConsultaAdministracion(EstadoActivo))
         {
         }
 
         internal Form1(Logica.ServicioAutenticacion autenticacion, Logica.IConsultaAsistencia consultaAsistencia,
-            Logica.IConsultaAdministracion consultaAdministracion,
-            Func<Logica.SesionUsuario, Task<int>> cargarDatosPrueba = null)
+            Logica.IConsultaAdministracion consultaAdministracion)
         {
             this.autenticacion = autenticacion ?? throw new ArgumentNullException(nameof(autenticacion));
             this.consultaAsistencia = consultaAsistencia ?? throw new ArgumentNullException(nameof(consultaAsistencia));
             this.consultaAdministracion = consultaAdministracion ?? throw new ArgumentNullException(nameof(consultaAdministracion));
-            this.cargarDatosPrueba = cargarDatosPrueba;
             InitializeComponent();
             Text = "AssistPRO | Acceso";
             StartPosition = FormStartPosition.CenterScreen;
@@ -251,7 +246,7 @@ namespace WindowsForms_Presentacion
                 try
                 {
                     using (Form principal = sesion.EsAdministrador
-                        ? (Form)new FrmAdministrador(sesion, consultaAdministracion, cargarDatosPrueba)
+                        ? (Form)new FrmAdministrador(sesion, consultaAdministracion)
                         : new FrmPrincipal(sesion, consultaAsistencia))
                     {
                         Hide();

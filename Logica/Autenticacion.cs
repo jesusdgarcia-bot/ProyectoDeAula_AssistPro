@@ -21,8 +21,14 @@ namespace Logica
         public int IdRol { get; private set; }
         public string Nombre { get; private set; }
         public string Rol { get; private set; }
-        public bool EsAdministrador => string.Equals(Rol?.Trim(), "Administrador", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(Rol?.Trim(), "Admin", StringComparison.OrdinalIgnoreCase);
+        public bool EsAdministrador => EsRolAdministrador(Rol);
+
+        public static bool EsRolAdministrador(string rol)
+        {
+            var nombre = rol?.Trim();
+            return string.Equals(nombre, "Administrador", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(nombre, "Admin", StringComparison.OrdinalIgnoreCase);
+        }
 
         public SesionUsuario(Usuario usuario)
         {

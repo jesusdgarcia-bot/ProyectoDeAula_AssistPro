@@ -15,7 +15,8 @@ namespace Persistencia
             return ConsultarRegistrosAsync(desde, hasta, idEmpleado);
         }
 
-        internal static async Task<List<RegistroAsistencia>> ConsultarRegistrosAsync(DateTime desde, DateTime hasta, int? idEmpleado)
+        internal static async Task<List<RegistroAsistencia>> ConsultarRegistrosAsync(DateTime desde, DateTime hasta,
+            int? idEmpleado, bool incluirDetalle = false)
         {
             if (desde.Date > hasta.Date) throw new ArgumentException("El rango de fechas es inválido.");
             DateTime inicio = desde.Date;
@@ -26,9 +27,8 @@ namespace Persistencia
                 contexto.Configuration.ProxyCreationEnabled = false;
                 var registros = contexto.RegistrosAsistencia.AsNoTracking()
                     .Where(r => r.Fecha >= inicio && r.Fecha < fin);
-                registros = idEmpleado.HasValue
-                    ? registros.Where(r => r.IdEmpleado == idEmpleado.Value)
-                    : registros.Include(r => r.Empleado);
+                if (idEmpleado.HasValue) registros = registros.Where(r => r.IdEmpleado == idEmpleado.Value);
+                if (incluirDetalle) registros = registros.Include(r => r.Empleado).Include(r => r.Dispositivo);
                 return await registros
                     .OrderByDescending(r => r.Fecha).ThenByDescending(r => r.Hora).ThenByDescending(r => r.IdRegistro)
                     .Take(500).ToListAsync().ConfigureAwait(false);

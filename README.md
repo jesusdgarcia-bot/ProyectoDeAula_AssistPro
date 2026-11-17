@@ -1,22 +1,19 @@
 # ProyectoDeAula_AssistPro
 
 Sistema de asistencia con biometría. .NET Framework 4.8 (WinForms) en capas
-`Entidades` / `Persistencia` / `Logica` / `WindowsForms_Presentacion`, sobre **Oracle XE 18c**.
+`Entidades` / `Persistencia` / `Logica` / `WindowsForms_Presentacion`, sobre **Oracle Database**.
 
-## Probar la aplicación con datos de ejemplo
+## Iniciar la aplicación
 
-Compila la solución en configuración Debug y ejecuta este comando en PowerShell desde la carpeta del proyecto.
+Abre la solución en Visual Studio y ejecuta `WindowsForms_Presentacion` como proyecto de inicio. La aplicación usa la conexión Oracle configurada en `WindowsForms_Presentacion/App.config`.
 
-```powershell
-.\WindowsForms_Presentacion\bin\Debug\WindowsForms_Presentacion.exe --demo
-```
+Inicia sesión con una cuenta activa registrada en `ASISTENCIA.USUARIO` y elige el perfil correspondiente. El empleado consulta sus registros en **Mi asistencia**. Una cuenta con rol `Administrador` o `Admin` abre el panel de administración.
 
-| Perfil de acceso | Usuario de prueba | Contraseña de prueba |
-| --- | --- | --- |
-| Empleado | `demo` | `AssistProDemo26!` |
-| Administrador | `admin` | `AssistProAdmin26!` |
+## Registrar datos desde el panel
 
-El perfil Empleado abre **Mi asistencia**. El perfil Administrador abre un panel de consulta con los módulos **Asistencia**, **Empleados** y **Usuarios**. El arranque normal usa Oracle y comprueba el rol guardado en la cuenta. Los roles `Administrador` y `Admin` corresponden al perfil Administrador.
+En el panel de administración, selecciona el módulo y pulsa **Agregar** o **Registrar marcación**. Los nuevos registros se guardan en Oracle. Si un formulario requiere una referencia, crea primero el registro en su módulo. Por ejemplo, crea una sede, un departamento y un cargo antes de agregar un empleado. Para crear una cuenta de acceso, selecciona el empleado y su rol.
+
+En **Asistencia** puedes consultar por rango de fechas y filtrar por empleado. Las marcaciones ingresadas desde el panel quedan identificadas como `Manual`. **Plantillas** muestra la información de las plantillas biométricas ya registradas.
 
 ## Base de datos (Entity Framework 6 Code-First + Migraciones)
 

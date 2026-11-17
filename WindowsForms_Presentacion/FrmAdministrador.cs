@@ -10,7 +10,7 @@ using Logica;
 
 namespace WindowsForms_Presentacion
 {
-    internal sealed class FrmAdministrador : Form
+    internal sealed partial class FrmAdministrador : Form
     {
         private static readonly Color Fondo = Color.FromArgb(13, 10, 20);
         private static readonly Color FondoLateral = Color.FromArgb(25, 16, 39);
@@ -28,17 +28,29 @@ namespace WindowsForms_Presentacion
         {
             Text = "Actualizar vista", Principal = true, Size = new Size(150, 40)
         };
-        private readonly AccesoButton cargarPrueba;
+        private readonly AccesoButton agregar = new AccesoButton
+        {
+            Text = "Agregar", Principal = true, Size = new Size(174, 40)
+        };
+        private readonly AccesoButton filtrarEmpleado = new AccesoButton
+        {
+            Text = "Filtrar empleado", BackColor = SeleccionTabla, Size = new Size(160, 40)
+        };
+        private int? idEmpleadoFiltrado;
+        private readonly SesionUsuario sesion;
+        private readonly IConsultaAdministracion consulta;
+        private readonly string estadoActivo = System.Configuration.ConfigurationManager.AppSettings["EstadoActivo"] ?? "A";
         private readonly Label titulo = new Label();
         private readonly Label estado = new Label();
         private bool cargando;
 
-        internal FrmAdministrador(SesionUsuario sesion, IConsultaAdministracion consulta,
-            Func<SesionUsuario, Task<int>> cargarDatosPrueba = null)
+        internal FrmAdministrador(SesionUsuario sesion, IConsultaAdministracion consulta)
         {
             if (sesion == null) throw new ArgumentNullException(nameof(sesion));
             if (!sesion.EsAdministrador) throw new UnauthorizedAccessException();
             if (consulta == null) throw new ArgumentNullException(nameof(consulta));
+            this.sesion = sesion;
+            this.consulta = consulta;
 
             Text = "AssistPRO | Administración";
             StartPosition = FormStartPosition.CenterScreen;
@@ -49,38 +61,14 @@ namespace WindowsForms_Presentacion
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 11F);
 
-            if (cargarDatosPrueba != null)
-            {
-                cargarPrueba = new AccesoButton
-                {
-                    Text = "Cargar datos de prueba", BackColor = SeleccionTabla,
-                    Size = new Size(204, 40), Margin = new Padding(8, 22, 0, 0), Visible = false
-                };
-                cargarPrueba.Click += async (origen, evento) => await CargarPruebaAsync(sesion, cargarDatosPrueba);
-            }
-
             ConstruirInterfaz(sesion);
-            AgregarVista("Asistencia", new[] { "Empleado", "Fecha", "Hora", "Marcación", "Verificación" },
-                () => consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value),
-                registro => new object[]
-                {
-                    NombreEmpleado(registro.Empleado), registro.Fecha.ToString("dd/MM/yyyy"),
-                    registro.Hora.ToString("HH:mm:ss"), registro.TipoMarcacion, registro.MetodoVerificacion
-                }, usaFechas: true);
-            AgregarVista("Empleados", new[] { "ID", "Nombre", "Documento", "Departamento", "Cargo", "Estado" },
-                consulta.ListarEmpleadosAsync, empleado => new object[]
-                {
-                    empleado.IdEmpleado, NombreEmpleado(empleado), empleado.NumeroDocumento,
-                    empleado.Departamento?.NombreDepartamento, empleado.Cargo?.NombreCargo, empleado.Estado
-                });
-            AgregarVista("Usuarios", new[] { "ID", "Usuario", "Empleado", "Rol", "Estado" },
-                consulta.ListarUsuariosAsync, cuenta => new object[]
-                {
-                    cuenta.IdUsuario, cuenta.NombreUsuario, cuenta.Empleado, cuenta.Rol, cuenta.Estado
-                });
+            ConfigurarOperaciones();
+            ConfigurarCatalogos();
 
             modulos.SelectedIndexChanged += async (origen, evento) => await CargarVistaAsync();
             actualizar.Click += async (origen, evento) => await CargarVistaAsync();
+            agregar.Click += async (origen, evento) => await AgregarRegistroAsync();
+            filtrarEmpleado.Click += async (origen, evento) => await FiltrarEmpleadoAsync();
             Shown += (origen, evento) => modulos.SelectedIndex = 0;
         }
 
@@ -119,7 +107,7 @@ namespace WindowsForms_Presentacion
             modulos.AccessibleName = "Módulos";
             modulos.IntegralHeight = false;
             modulos.DrawMode = DrawMode.OwnerDrawFixed;
-            modulos.ItemHeight = Font.Height + 28;
+            modulos.ItemHeight = Font.Height + 14;
             modulos.DrawItem += DibujarModulo;
             panel.Controls.Add(modulos, 0, 1);
             panel.Controls.Add(new Label
@@ -191,8 +179,9 @@ namespace WindowsForms_Presentacion
             AgregarFecha("Desde", desde, DateTime.Today.AddDays(-30));
             AgregarFecha("Hasta", hasta, DateTime.Today);
             acciones.Controls.Add(filtros);
+            acciones.Controls.Add(agregar);
             acciones.Controls.Add(actualizar);
-            if (cargarPrueba != null) acciones.Controls.Add(cargarPrueba);
+            acciones.Controls.Add(filtrarEmpleado);
             panel.Controls.Add(acciones, 0, 1);
 
             tabla.Dock = DockStyle.Fill;
@@ -248,13 +237,14 @@ namespace WindowsForms_Presentacion
         }
 
         private void AgregarVista<T>(string nombre, string[] columnas, Func<Task<List<T>>> listar,
-            Func<T, object[]> valores, bool usaFechas = false)
+            Func<T, object[]> valores, Func<Task<bool>> crear = null, bool usaFechas = false)
         {
             modulos.Items.Add(nombre);
             vistas.Add(new Vista
             {
                 Columnas = columnas,
                 UsaFechas = usaFechas,
+                AgregarAsync = crear,
                 CargarAsync = async () => (await listar()).Select(valores).ToArray()
             });
         }
@@ -263,25 +253,30 @@ namespace WindowsForms_Presentacion
         {
             cargando = enCurso;
             if (IsDisposed || Disposing) return;
-            modulos.Enabled = actualizar.Enabled = filtros.Enabled = !enCurso;
-            if (cargarPrueba != null) cargarPrueba.Enabled = !enCurso;
+            modulos.Enabled = actualizar.Enabled = filtros.Enabled = agregar.Enabled = filtrarEmpleado.Enabled = !enCurso;
         }
 
-        private async Task CargarPruebaAsync(SesionUsuario sesion, Func<SesionUsuario, Task<int>> cargarDatosPrueba)
+        private async Task AgregarRegistroAsync()
         {
-            if (cargando) return;
+            if (cargando || modulos.SelectedIndex < 0) return;
 
-            int insertados;
+            var vista = vistas[modulos.SelectedIndex];
+            if (vista.AgregarAsync == null) return;
+            var estadoAnterior = estado.Text;
+            bool guardado;
             CambiarCarga(true);
-            estado.Text = "Guardando marcaciones de prueba en Oracle…";
+            estado.Text = "Preparando el formulario…";
             try
             {
-                insertados = await cargarDatosPrueba(sesion);
+                guardado = await vista.AgregarAsync();
             }
-            catch (Exception)
+            catch (Exception error)
             {
                 if (!IsDisposed && !Disposing)
-                    estado.Text = "No se pudieron cargar los datos de prueba en Oracle. Inténtalo de nuevo.";
+                {
+                    estado.Text = error is InvalidOperationException || error is UnauthorizedAccessException
+                        ? error.Message : "No se pudo completar el alta en Oracle.";
+                }
                 return;
             }
             finally
@@ -290,13 +285,8 @@ namespace WindowsForms_Presentacion
             }
 
             if (IsDisposed || Disposing) return;
-            DateTime hoy = DateTime.Today;
-            desde.Value = hoy.AddDays(-30);
-            hasta.Value = hoy;
-            string resultado = insertados == 0 ? "Los datos de prueba ya estaban guardados."
-                : insertados == 1 ? "Se guardó 1 marcación de prueba en Oracle."
-                : $"Se guardaron {insertados} marcaciones de prueba en Oracle.";
-            await CargarVistaAsync(resultado);
+            if (guardado) await CargarVistaAsync("Registro guardado en Oracle.");
+            else estado.Text = estadoAnterior;
         }
 
         private async Task CargarVistaAsync(string resultadoCarga = null)
@@ -306,8 +296,14 @@ namespace WindowsForms_Presentacion
             var vista = vistas[modulos.SelectedIndex];
             titulo.Text = modulos.SelectedItem.ToString();
             filtros.Visible = vista.UsaFechas;
-            if (cargarPrueba != null) cargarPrueba.Visible = vista.UsaFechas;
-            actualizar.Margin = vista.UsaFechas ? new Padding(0, 22, 0, 0) : Padding.Empty;
+            filtrarEmpleado.Visible = vista.UsaFechas;
+            filtrarEmpleado.Text = idEmpleadoFiltrado.HasValue ? "Cambiar empleado" : "Filtrar empleado";
+            agregar.Visible = vista.AgregarAsync != null;
+            int separacion = vista.UsaFechas ? 22 : 0;
+            agregar.Margin = new Padding(0, separacion, 8, 0);
+            actualizar.Margin = new Padding(0, separacion, 8, 0);
+            filtrarEmpleado.Margin = new Padding(0, separacion, 0, 0);
+            agregar.Text = vista.UsaFechas ? "Registrar marcación" : "Agregar";
             tabla.Columns.Clear();
             foreach (string columna in vista.Columnas)
             {
@@ -356,6 +352,7 @@ namespace WindowsForms_Presentacion
         {
             internal string[] Columnas { get; set; }
             internal bool UsaFechas { get; set; }
+            internal Func<Task<bool>> AgregarAsync { get; set; }
             internal Func<Task<object[][]>> CargarAsync { get; set; }
         }
     }

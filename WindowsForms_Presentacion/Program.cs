@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WindowsForms_Presentacion
@@ -12,12 +9,11 @@ namespace WindowsForms_Presentacion
         /// Punto de entrada principal para la aplicación.
         /// </summary>
         [STAThread]
-        static void Main(string[] args)
+        static void Main()
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            bool modoDemostracion = args.Length == 1 && args[0] == "--demo";
-            Application.Run(modoDemostracion ? DatosDemostracion.CrearFormulario() : new Form1());
+            Application.Run(new Form1());
         }
     }
 }
