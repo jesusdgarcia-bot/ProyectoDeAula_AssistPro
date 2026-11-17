@@ -82,8 +82,10 @@ namespace WindowsForms_Presentacion
             registros.ReadOnly = true;
             registros.AllowUserToAddRows = false;
             registros.AllowUserToDeleteRows = false;
+            registros.AllowUserToResizeRows = false;
             registros.AutoGenerateColumns = false;
             registros.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            registros.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             registros.RowHeadersVisible = false;
             registros.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             registros.MultiSelect = false;

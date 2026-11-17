@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WindowsForms_Presentacion
@@ -21,26 +22,31 @@ namespace WindowsForms_Presentacion
         private readonly Logica.ServicioAutenticacion autenticacion;
         private readonly Logica.IConsultaAsistencia consultaAsistencia;
         private readonly Logica.IConsultaAdministracion consultaAdministracion;
+        private readonly Func<Logica.SesionUsuario, Task<int>> cargarDatosPrueba;
         private bool autenticando;
         public Logica.SesionUsuario SesionActual { get; private set; }
+        private static string EstadoActivo => System.Configuration.ConfigurationManager.AppSettings["EstadoActivo"] ?? "A";
 
         public Form1() : this(new Logica.ServicioAutenticacion(
             new Persistencia.RepositorioUsuarios(), new Logica.ClavesPbkdf2(),
-            System.Configuration.ConfigurationManager.AppSettings["EstadoActivo"] ?? "A"))
+            EstadoActivo))
         {
         }
 
         public Form1(Logica.ServicioAutenticacion autenticacion)
-            : this(autenticacion, new Persistencia.ConsultaAsistencia(), new Persistencia.ConsultaAdministracion())
+            : this(autenticacion, new Persistencia.ConsultaAsistencia(), new Persistencia.ConsultaAdministracion(),
+                new Persistencia.CargaDatosPrueba(EstadoActivo).CargarAsync)
         {
         }
 
         internal Form1(Logica.ServicioAutenticacion autenticacion, Logica.IConsultaAsistencia consultaAsistencia,
-            Logica.IConsultaAdministracion consultaAdministracion)
+            Logica.IConsultaAdministracion consultaAdministracion,
+            Func<Logica.SesionUsuario, Task<int>> cargarDatosPrueba = null)
         {
             this.autenticacion = autenticacion ?? throw new ArgumentNullException(nameof(autenticacion));
             this.consultaAsistencia = consultaAsistencia ?? throw new ArgumentNullException(nameof(consultaAsistencia));
             this.consultaAdministracion = consultaAdministracion ?? throw new ArgumentNullException(nameof(consultaAdministracion));
+            this.cargarDatosPrueba = cargarDatosPrueba;
             InitializeComponent();
             Text = "AssistPRO | Acceso";
             StartPosition = FormStartPosition.CenterScreen;
@@ -49,27 +55,29 @@ namespace WindowsForms_Presentacion
             Font = new Font("Segoe UI", 11);
             BackColor = Color.FromArgb(13, 10, 20);
             ForeColor = Color.White;
-            ClientSize = new Size(980, 780);
-            MinimumSize = new Size(440, 560);
+            ClientSize = new Size(820, 660);
+            MinimumSize = new Size(420, 540);
             DoubleBuffered = true;
             CrearAcceso();
         }
 
         private void CrearAcceso()
         {
-            var scroll = new FondoAcceso { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(24) };
+            const int anchoMaximo = 464;
+            const int margen = 20;
+            var scroll = new FondoAcceso { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(margen) };
             var layout = new TarjetaAcceso
             {
                 AutoSize = false,
-                ColumnCount = 1, RowCount = 0, Padding = new Padding(32),
-                BackColor = Surface, Width = 560, TabStop = false
+                ColumnCount = 1, RowCount = 0, Padding = new Padding(26, 20, 26, 20),
+                BackColor = Surface, Width = anchoMaximo, TabStop = false
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            Agregar(layout, new MarcaAcceso { Height = 88 }, 0, 12);
-            Agregar(layout, Texto("AssistPRO", 30, Color.White, FontStyle.Bold), 0, 8);
-            Agregar(layout, Texto("Control de asistencia laboral", 11, Muted), 0, 24);
+            Agregar(layout, new AvatarAcceso { Height = 62 }, 0, 5);
+            Agregar(layout, Texto("AssistPRO", 25, Color.White, FontStyle.Bold), 0, 2);
+            Agregar(layout, Texto("Control de asistencia laboral", 10, Muted), 0, 15);
 
-            Agregar(layout, Texto("Perfil de acceso", 11, Muted), 0, 8);
+            Agregar(layout, Texto("Perfil de acceso", 10, Muted), 0, 5);
             var perfiles = new TableLayoutPanel { ColumnCount = 2, RowCount = 1, AutoSize = true };
             perfiles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             perfiles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -78,65 +86,77 @@ namespace WindowsForms_Presentacion
             perfiles.Controls.Add(perfilEmpleado, 0, 0);
             perfiles.Controls.Add(perfilAdministrador, 1, 0);
             perfilEmpleado.Checked = true;
-            Agregar(layout, perfiles, 0, 16);
+            Agregar(layout, perfiles, 0, 11);
 
-            Agregar(layout, Texto("Nombre de usuario", 11, Muted), 0, 8);
-            Agregar(layout, Campo(usuario, false), 0, 4);
+            Agregar(layout, Texto("Nombre de usuario", 10, Muted), 0, 4);
+            Agregar(layout, Campo(usuario, false), 0, 0);
             PrepararError(errorUsuario);
-            Agregar(layout, errorUsuario, 0, 12);
-            Agregar(layout, Texto("Contraseña", 11, Muted), 0, 8);
-            Agregar(layout, Campo(clave, true), 0, 4);
+            Agregar(layout, errorUsuario, 4, 0);
+            Agregar(layout, Texto("Contraseña", 10, Muted), 10, 4);
+            Agregar(layout, Campo(clave, true), 0, 0);
             PrepararError(errorClave);
-            Agregar(layout, errorClave, 0, 8);
+            Agregar(layout, errorClave, 4, 0);
 
-            var opciones = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true };
-            var mostrar = new CheckBox { Text = "Mostrar contraseña", AutoSize = true, ForeColor = Muted, Margin = new Padding(0, 4, 16, 8) };
+            var opciones = new FlowLayoutPanel
+            {
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill, WrapContents = true,
+                Font = new Font(Font.FontFamily, 10)
+            };
+            var mostrar = new CheckBox { Text = "Mostrar contraseña", AutoSize = true, ForeColor = Muted, Margin = new Padding(0, 0, 14, 3) };
             mostrar.CheckedChanged += (s, e) => clave.UseSystemPasswordChar = !mostrar.Checked;
             var recuperar = new LinkLabel
             {
                 Text = "Recuperar acceso", AutoSize = true, LinkColor = Color.FromArgb(201, 165, 255),
                 ActiveLinkColor = Color.White, VisitedLinkColor = Color.FromArgb(201, 165, 255),
-                Margin = new Padding(0, 4, 0, 8)
+                Margin = new Padding(0, 2, 0, 3)
             };
             recuperar.LinkClicked += (s, e) => estado.Text = "Contacta al administrador de tu empresa para recuperar el acceso.";
             opciones.Controls.Add(mostrar);
             opciones.Controls.Add(recuperar);
-            Agregar(layout, opciones, 0, 16);
+            Agregar(layout, opciones, 9, 10);
 
-            var entrar = new AccesoButton { Text = "Iniciar sesión", BackColor = Accent, Height = 52, Principal = true };
+            var entrar = new AccesoButton { Text = "Iniciar sesión", BackColor = Accent, Height = 44, Principal = true };
             entrar.Click += ValidarAcceso;
-            Agregar(layout, entrar, 0, 8);
+            Agregar(layout, entrar, 0, 6);
             AcceptButton = entrar;
             estado.AutoSize = true;
             estado.ForeColor = Muted;
             estado.AccessibleName = "Estado del acceso";
             estado.Text = "Ingresa tus credenciales para continuar.";
-            Agregar(layout, estado, 0, 20);
-            Agregar(layout, Texto("Acceso biométrico", 11, Muted), 0, 12);
+            estado.Font = new Font(Font.FontFamily, 10);
+            Agregar(layout, estado, 0, 13);
+            Agregar(layout, Texto("Acceso biométrico", 10, Muted), 0, 5);
             var biometria = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
             biometria.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             biometria.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            var huella = new AccesoButton { Text = "Huella dactilar", Icono = "huella", Height = 90, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0), BackColor = Color.FromArgb(43, 28, 62) };
-            var rostro = new AccesoButton { Text = "Reconocimiento facial", Icono = "rostro", Height = 90, Dock = DockStyle.Fill, Margin = new Padding(6, 0, 0, 0), BackColor = huella.BackColor };
+            var huella = new AccesoButton { Text = "Huella dactilar", Icono = "huella", Height = 48, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 4, 0), BackColor = Color.FromArgb(43, 28, 62), Font = opciones.Font };
+            var rostro = new AccesoButton { Text = "Rostro", Icono = "rostro", Height = 48, Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), BackColor = huella.BackColor, Font = opciones.Font };
             huella.Click += (s, e) => estado.Text = "El acceso por huella aún no está habilitado. Utiliza tu usuario y contraseña.";
             rostro.Click += (s, e) => estado.Text = "El reconocimiento facial aún no está habilitado. Utiliza tu usuario y contraseña.";
             biometria.Controls.Add(huella, 0, 0);
             biometria.Controls.Add(rostro, 1, 0);
-            Agregar(layout, biometria, 0, 20);
+            Agregar(layout, biometria, 0, 0);
             scroll.Controls.Add(layout);
             Controls.Add(scroll);
 
             // El ancho depende del espacio disponible. AutoSize conserva todo el texto.
             scroll.Layout += (s, e) =>
             {
-                int ancho = Math.Min(560, Math.Max(280, scroll.ClientSize.Width - 64));
+                int ancho = Math.Min(anchoMaximo, Math.Max(280, scroll.ClientSize.Width - 2 * margen));
                 layout.Width = ancho;
+                var anchoTexto = new Size(ancho - layout.Padding.Horizontal, 0);
+                estado.MaximumSize = anchoTexto;
+                errorUsuario.MaximumSize = anchoTexto;
+                errorClave.MaximumSize = anchoTexto;
                 layout.Height = layout.GetPreferredSize(new Size(ancho, 0)).Height;
-                estado.MaximumSize = new Size(ancho - 64, 0);
-                int x = Math.Max(24, (scroll.ClientSize.Width - ancho) / 2);
-                int y = Math.Max(24, (scroll.ClientSize.Height - layout.Height) / 2);
+                int x = Math.Max(margen, (scroll.ClientSize.Width - ancho) / 2);
+                int y = Math.Max(margen, (scroll.ClientSize.Height - layout.Height) / 2);
                 layout.Location = new Point(x + scroll.AutoScrollPosition.X, y + scroll.AutoScrollPosition.Y);
             };
+            EventHandler ajustarAltura = (s, e) => scroll.PerformLayout();
+            estado.TextChanged += ajustarAltura;
+            errorUsuario.TextChanged += ajustarAltura;
+            errorClave.TextChanged += ajustarAltura;
             usuario.TextChanged += (s, e) => errorUsuario.Text = "";
             clave.TextChanged += (s, e) => errorClave.Text = "";
             Shown += (s, e) => usuario.Focus();
@@ -148,7 +168,7 @@ namespace WindowsForms_Presentacion
             boton.Appearance = Appearance.Button;
             boton.AutoSize = false;
             boton.Dock = DockStyle.Fill;
-            boton.Height = 38;
+            boton.Height = 34;
             boton.Margin = margen;
             boton.TextAlign = ContentAlignment.MiddleCenter;
             boton.FlatStyle = FlatStyle.Flat;
@@ -176,15 +196,16 @@ namespace WindowsForms_Presentacion
         private static void PrepararError(Label label)
         {
             label.AutoSize = true;
-            label.MinimumSize = new Size(0, 18);
+            label.Visible = false;
             label.ForeColor = Color.FromArgb(255, 178, 190);
             label.Font = new Font("Segoe UI", 9);
+            label.TextChanged += (s, e) => label.Visible = label.Text.Length > 0;
         }
 
         private static Control Campo(TextBox campo, bool password)
         {
-            var borde = new CampoAcceso { Height = 52, Padding = new Padding(48, 2, 2, 2), BackColor = Color.FromArgb(17, 12, 26), Icono = password ? "candado" : "usuario" };
-            var interior = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 12, 12, 8), BackColor = Color.FromArgb(17, 12, 26) };
+            var borde = new CampoAcceso { Height = 42, Padding = new Padding(42, 3, 13, 3), BackColor = Surface, Icono = password ? "candado" : "usuario" };
+            var interior = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 7, 0, 6), BackColor = CampoAcceso.Superficie };
             campo.Dock = DockStyle.Fill;
             campo.BorderStyle = BorderStyle.None;
             campo.Font = new Font("Segoe UI", 12);
@@ -230,7 +251,7 @@ namespace WindowsForms_Presentacion
                 try
                 {
                     using (Form principal = sesion.EsAdministrador
-                        ? (Form)new FrmAdministrador(sesion, consultaAdministracion)
+                        ? (Form)new FrmAdministrador(sesion, consultaAdministracion, cargarDatosPrueba)
                         : new FrmPrincipal(sesion, consultaAsistencia))
                     {
                         Hide();
@@ -307,10 +328,10 @@ namespace WindowsForms_Presentacion
             if (!string.IsNullOrEmpty(Icono))
             {
                 using (var circulo = new SolidBrush(Color.FromArgb(83, 37, 127)))
-                    e.Graphics.FillEllipse(circulo, 12, Height / 2 - 23, 46, 46);
-                DibujoAcceso.Icono(e.Graphics, Icono, new Rectangle(21, Height / 2 - 14, 28, 28));
-                texto.X = 66;
-                texto.Width = Math.Max(1, Width - 76);
+                    e.Graphics.FillEllipse(circulo, 9, Height / 2 - 16, 32, 32);
+                DibujoAcceso.Icono(e.Graphics, Icono, new Rectangle(14, Height / 2 - 11, 22, 22));
+                texto.X = 46;
+                texto.Width = Math.Max(1, Width - 54);
             }
             TextRenderer.DrawText(e.Graphics, Text, Font, texto,
                 Enabled ? ForeColor : Color.Gray, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
@@ -388,6 +409,7 @@ namespace WindowsForms_Presentacion
 
     internal sealed class CampoAcceso : Panel
     {
+        internal static readonly Color Superficie = Color.FromArgb(17, 12, 26);
         public string Icono { get; set; }
         public bool Activo { get; set; }
 
@@ -398,34 +420,41 @@ namespace WindowsForms_Presentacion
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using (var path = DibujoAcceso.Redondeado(new RectangleF(1, 1, Width - 3, Height - 3), 12))
+            using (var relleno = new SolidBrush(Superficie))
             using (var pen = new Pen(Activo ? Color.FromArgb(221, 181, 255) : Color.FromArgb(119, 76, 155), Activo ? 2 : 1))
+            {
+                e.Graphics.FillPath(relleno, path);
                 e.Graphics.DrawPath(pen, path);
-            DibujoAcceso.Icono(e.Graphics, Icono, new Rectangle(13, (Height - 25) / 2, 25, 25));
+            }
+            DibujoAcceso.Icono(e.Graphics, Icono, new Rectangle(11, (Height - 22) / 2, 22, 22));
         }
     }
 
-    internal sealed class MarcaAcceso : Control
+    internal sealed class AvatarAcceso : Control
     {
-        public MarcaAcceso() { SetStyle(ControlStyles.SupportsTransparentBackColor, true); BackColor = Color.Transparent; DoubleBuffered = true; }
+        public AvatarAcceso()
+        {
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            DoubleBuffered = true;
+            ResizeRedraw = true;
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            int x = (Width - 80) / 2;
-            var r = new Rectangle(x, 3, 80, 80);
-            using (var path = DibujoAcceso.Redondeado(r, 20))
-            using (var fill = new LinearGradientBrush(r, Color.FromArgb(108, 38, 157), Color.FromArgb(28, 13, 49), 90))
-            using (var edge = new Pen(Color.FromArgb(185, 114, 233), 1.5f))
+            int diametro = Math.Min(56, Math.Min(Width, Height) - 4);
+            if (diametro <= 0) return;
+
+            var borde = new Rectangle((Width - diametro) / 2, (Height - diametro) / 2, diametro, diametro);
+            using (var fondo = new LinearGradientBrush(borde, Color.FromArgb(108, 38, 157), Color.FromArgb(48, 23, 76), 90))
+            using (var linea = new Pen(Color.FromArgb(185, 114, 233), 1.5f))
             {
-                e.Graphics.FillPath(fill, path);
-                e.Graphics.DrawPath(edge, path);
+                e.Graphics.FillEllipse(fondo, borde);
+                e.Graphics.DrawEllipse(linea, borde);
             }
-            using (var a = new LinearGradientBrush(r, Color.FromArgb(230, 188, 255), Color.FromArgb(132, 45, 224), 110))
-            {
-                e.Graphics.FillPolygon(a, new Point[] {
-                    new Point(x + 40, 15), new Point(x + 65, 67), new Point(x + 51, 67),
-                    new Point(x + 40, 40), new Point(x + 29, 67), new Point(x + 15, 67) });
-                e.Graphics.FillPolygon(a, new Point[] { new Point(x + 30, 50), new Point(x + 49, 50), new Point(x + 54, 59), new Point(x + 26, 59) });
-            }
+            int icono = diametro * 4 / 7;
+            DibujoAcceso.Icono(e.Graphics, "usuario", new Rectangle((Width - icono) / 2, (Height - icono) / 2, icono, icono));
         }
     }
 
@@ -439,7 +468,7 @@ namespace WindowsForms_Presentacion
             var r = new Rectangle(1, 1, Width - 3, Height - 3);
             if (r.Width <= 0 || r.Height <= 0) return;
             using (var path = DibujoAcceso.Redondeado(r, 26))
-            using (var fill = new LinearGradientBrush(r, Color.FromArgb(40, 23, 60), BackColor, 90))
+            using (var fill = new SolidBrush(BackColor))
             using (var edge = new Pen(Color.FromArgb(146, 88, 185), 1.5f))
             {
                 e.Graphics.FillPath(fill, path);

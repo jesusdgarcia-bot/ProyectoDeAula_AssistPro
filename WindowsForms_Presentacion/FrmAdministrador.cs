@@ -28,11 +28,13 @@ namespace WindowsForms_Presentacion
         {
             Text = "Actualizar vista", Principal = true, Size = new Size(150, 40)
         };
+        private readonly AccesoButton cargarPrueba;
         private readonly Label titulo = new Label();
         private readonly Label estado = new Label();
         private bool cargando;
 
-        internal FrmAdministrador(SesionUsuario sesion, IConsultaAdministracion consulta)
+        internal FrmAdministrador(SesionUsuario sesion, IConsultaAdministracion consulta,
+            Func<SesionUsuario, Task<int>> cargarDatosPrueba = null)
         {
             if (sesion == null) throw new ArgumentNullException(nameof(sesion));
             if (!sesion.EsAdministrador) throw new UnauthorizedAccessException();
@@ -46,6 +48,16 @@ namespace WindowsForms_Presentacion
             BackColor = Fondo;
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 11F);
+
+            if (cargarDatosPrueba != null)
+            {
+                cargarPrueba = new AccesoButton
+                {
+                    Text = "Cargar datos de prueba", BackColor = SeleccionTabla,
+                    Size = new Size(204, 40), Margin = new Padding(8, 22, 0, 0), Visible = false
+                };
+                cargarPrueba.Click += async (origen, evento) => await CargarPruebaAsync(sesion, cargarDatosPrueba);
+            }
 
             ConstruirInterfaz(sesion);
             AgregarVista("Asistencia", new[] { "Empleado", "Fecha", "Hora", "Marcación", "Verificación" },
@@ -180,6 +192,7 @@ namespace WindowsForms_Presentacion
             AgregarFecha("Hasta", hasta, DateTime.Today);
             acciones.Controls.Add(filtros);
             acciones.Controls.Add(actualizar);
+            if (cargarPrueba != null) acciones.Controls.Add(cargarPrueba);
             panel.Controls.Add(acciones, 0, 1);
 
             tabla.Dock = DockStyle.Fill;
@@ -246,13 +259,54 @@ namespace WindowsForms_Presentacion
             });
         }
 
-        private async Task CargarVistaAsync()
+        private void CambiarCarga(bool enCurso)
+        {
+            cargando = enCurso;
+            if (IsDisposed || Disposing) return;
+            modulos.Enabled = actualizar.Enabled = filtros.Enabled = !enCurso;
+            if (cargarPrueba != null) cargarPrueba.Enabled = !enCurso;
+        }
+
+        private async Task CargarPruebaAsync(SesionUsuario sesion, Func<SesionUsuario, Task<int>> cargarDatosPrueba)
+        {
+            if (cargando) return;
+
+            int insertados;
+            CambiarCarga(true);
+            estado.Text = "Guardando marcaciones de prueba en Oracle…";
+            try
+            {
+                insertados = await cargarDatosPrueba(sesion);
+            }
+            catch (Exception)
+            {
+                if (!IsDisposed && !Disposing)
+                    estado.Text = "No se pudieron cargar los datos de prueba en Oracle. Inténtalo de nuevo.";
+                return;
+            }
+            finally
+            {
+                CambiarCarga(false);
+            }
+
+            if (IsDisposed || Disposing) return;
+            DateTime hoy = DateTime.Today;
+            desde.Value = hoy.AddDays(-30);
+            hasta.Value = hoy;
+            string resultado = insertados == 0 ? "Los datos de prueba ya estaban guardados."
+                : insertados == 1 ? "Se guardó 1 marcación de prueba en Oracle."
+                : $"Se guardaron {insertados} marcaciones de prueba en Oracle.";
+            await CargarVistaAsync(resultado);
+        }
+
+        private async Task CargarVistaAsync(string resultadoCarga = null)
         {
             if (cargando || modulos.SelectedIndex < 0) return;
 
             var vista = vistas[modulos.SelectedIndex];
             titulo.Text = modulos.SelectedItem.ToString();
             filtros.Visible = vista.UsaFechas;
+            if (cargarPrueba != null) cargarPrueba.Visible = vista.UsaFechas;
             actualizar.Margin = vista.UsaFechas ? new Padding(0, 22, 0, 0) : Padding.Empty;
             tabla.Columns.Clear();
             foreach (string columna in vista.Columnas)
@@ -268,27 +322,28 @@ namespace WindowsForms_Presentacion
                 return;
             }
 
-            cargando = true;
-            modulos.Enabled = actualizar.Enabled = filtros.Enabled = false;
+            CambiarCarga(true);
             estado.Text = "Consultando registros…";
             try
             {
                 var filas = await vista.CargarAsync();
                 if (IsDisposed || Disposing) return;
                 foreach (object[] fila in filas) tabla.Rows.Add(fila);
-                estado.Text = filas.Length == 0 ? "No hay registros para mostrar."
-                    : filas.Length == 1 ? "1 registro" : $"{filas.Length} registros";
-                if (vista.UsaFechas && filas.Length == 500)
+                estado.Text = resultadoCarga ?? (filas.Length == 0 ? "No hay registros para mostrar."
+                    : filas.Length == 1 ? "1 registro" : $"{filas.Length} registros");
+                if (resultadoCarga == null && vista.UsaFechas && filas.Length == 500)
                     estado.Text = "Se muestran hasta 500 marcaciones. Reduce el rango para consultar otras.";
             }
             catch (Exception)
             {
-                if (!IsDisposed) estado.Text = "No se pudieron cargar los registros. Revisa la conexión e inténtalo de nuevo.";
+                if (!IsDisposed && !Disposing)
+                    estado.Text = resultadoCarga == null
+                        ? "No se pudieron cargar los registros. Revisa la conexión e inténtalo de nuevo."
+                        : resultadoCarga + " Pulsa Actualizar vista para ver los registros.";
             }
             finally
             {
-                cargando = false;
-                if (!IsDisposed) modulos.Enabled = actualizar.Enabled = filtros.Enabled = true;
+                CambiarCarga(false);
             }
         }
 
