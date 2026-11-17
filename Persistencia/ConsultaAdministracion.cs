@@ -13,6 +13,7 @@ namespace Persistencia
 {
     public sealed class ConsultaAdministracion : IConsultaAdministracion
     {
+        private const int LongitudMinimaClave = 8;
         private readonly string estadoActivo;
 
         public ConsultaAdministracion() : this("A")
@@ -100,6 +101,8 @@ namespace Persistencia
         {
             if (usuario == null) throw new ArgumentNullException(nameof(usuario));
             ExigirSesionAdministrativa(sesion);
+            if (clave == null || clave.Length < LongitudMinimaClave)
+                throw new ArgumentException($"La contraseña debe tener al menos {LongitudMinimaClave} caracteres.");
             usuario.ContrasenaHash = await Task.Run(() => new ClavesPbkdf2().CrearHash(clave)).ConfigureAwait(false);
             await GuardarAsync(sesion, usuario).ConfigureAwait(false);
         }
