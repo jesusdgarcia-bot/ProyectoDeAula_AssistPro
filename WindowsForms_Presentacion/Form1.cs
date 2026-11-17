@@ -116,7 +116,7 @@ namespace WindowsForms_Presentacion
             AcceptButton = entrar;
             estado.AutoSize = true;
             estado.ForeColor = Muted;
-            estado.AccessibleName = "Estado del acceso";
+            estado.AccessibleDescription = "Estado del acceso";
             estado.Text = "Ingresa tus credenciales para continuar.";
             estado.Font = new Font(Font.FontFamily, 10);
             Agregar(layout, estado, 0, 13);

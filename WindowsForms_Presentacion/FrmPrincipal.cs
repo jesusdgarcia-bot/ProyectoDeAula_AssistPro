@@ -22,8 +22,9 @@ namespace WindowsForms_Presentacion
             this.consulta = consulta ?? throw new ArgumentNullException(nameof(consulta));
             Text = "AssistPRO | Mi asistencia";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(1120, 740);
-            MinimumSize = new Size(760, 580);
+            var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+            ClientSize = new Size(Math.Min(1120, area.Width - 64), Math.Min(740, area.Height - 64));
+            MinimumSize = new Size(Math.Min(760, area.Width), Math.Min(580, area.Height));
             AutoScaleMode = AutoScaleMode.Dpi;
             Font = new Font("Segoe UI", 11);
             BackColor = Color.FromArgb(13, 10, 20);
@@ -107,7 +108,7 @@ namespace WindowsForms_Presentacion
             estado.Dock = DockStyle.Fill;
             estado.TextAlign = ContentAlignment.MiddleLeft;
             estado.ForeColor = Color.FromArgb(204, 185, 225);
-            estado.AccessibleName = "Estado de la consulta";
+            estado.AccessibleDescription = "Estado de la consulta";
             contenido.Controls.Add(estado, 0, 4);
             raiz.Controls.Add(lateral, 0, 0);
             raiz.Controls.Add(contenido, 1, 0);

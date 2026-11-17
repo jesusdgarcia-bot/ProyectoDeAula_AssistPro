@@ -55,8 +55,9 @@ namespace WindowsForms_Presentacion
             Text = "AssistPRO | Administración";
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(1120, 740);
-            MinimumSize = new Size(800, 520);
+            var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+            ClientSize = new Size(Math.Min(1120, area.Width - 64), Math.Min(740, area.Height - 64));
+            MinimumSize = new Size(Math.Min(800, area.Width), Math.Min(520, area.Height));
             BackColor = Fondo;
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 11F);
@@ -109,6 +110,7 @@ namespace WindowsForms_Presentacion
             modulos.DrawMode = DrawMode.OwnerDrawFixed;
             modulos.ItemHeight = Font.Height + 14;
             modulos.DrawItem += DibujarModulo;
+            modulos.Resize += (origen, evento) => AjustarAlturaModulos();
             panel.Controls.Add(modulos, 0, 1);
             panel.Controls.Add(new Label
             {
@@ -127,6 +129,15 @@ namespace WindowsForms_Presentacion
             salir.Click += (origen, evento) => Close();
             panel.Controls.Add(salir, 0, 4);
             return panel;
+        }
+
+        // Con ventanas bajas la lista no cabe y aparecería una barra de desplazamiento clara: se compacta cada módulo.
+        private void AjustarAlturaModulos()
+        {
+            if (modulos.Items.Count == 0 || modulos.Height <= 0) return;
+            int ideal = Font.Height + 14;
+            int altura = Math.Max(Font.Height + 4, Math.Min(ideal, modulos.Height / modulos.Items.Count));
+            if (modulos.ItemHeight != altura) modulos.ItemHeight = altura;
         }
 
         private void DibujarModulo(object origen, DrawItemEventArgs evento)
@@ -215,7 +226,7 @@ namespace WindowsForms_Presentacion
             panel.Controls.Add(tabla, 0, 2);
 
             estado.AutoSize = true;
-            estado.AccessibleName = "Estado de la consulta";
+            estado.AccessibleDescription = "Estado de la consulta";
             estado.ForeColor = TextoSecundario;
             estado.Margin = new Padding(0, 14, 0, 0);
             panel.Controls.Add(estado, 0, 3);
@@ -310,6 +321,8 @@ namespace WindowsForms_Presentacion
                 int indice = tabla.Columns.Add(columna, columna);
                 tabla.Columns[indice].MinimumWidth = 54;
                 if (columna == "ID") tabla.Columns[indice].FillWeight = 40;
+                else if (columna == "Empleado" || columna == "Nombre" || columna == "Dispositivo")
+                    tabla.Columns[indice].FillWeight = 160;
             }
             if (vista.UsaFechas && desde.Value.Date > hasta.Value.Date)
             {
