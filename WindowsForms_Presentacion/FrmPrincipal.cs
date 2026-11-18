@@ -25,12 +25,12 @@ namespace WindowsForms_Presentacion
             var area = Screen.FromPoint(Cursor.Position).WorkingArea;
             ClientSize = new Size(Math.Min(1120, area.Width - 64), Math.Min(740, area.Height - 64));
             MinimumSize = new Size(Math.Min(760, area.Width), Math.Min(580, area.Height));
+            WindowState = FormWindowState.Maximized;
             AutoScaleMode = AutoScaleMode.Dpi;
             Font = new Font("Segoe UI", 11);
-            BackColor = Color.FromArgb(13, 10, 20);
-            ForeColor = Color.White;
             CrearInterfaz();
             Shown += async (sender, args) => await CargarAsync();
+            TemaAplicacion.Registrar(this);
         }
 
         private void CrearInterfaz()
@@ -40,21 +40,26 @@ namespace WindowsForms_Presentacion
             raiz.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             var lateral = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5,
-                Padding = new Padding(20, 28, 20, 20), BackColor = Color.FromArgb(25, 16, 39)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
+                Padding = new Padding(20, 28, 20, 20)
             };
+            TemaAplicacion.DefinirRol(lateral, RolTema.Lateral);
+            lateral.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
             lateral.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             lateral.Controls.Add(Etiqueta("AssistPRO", 23, FontStyle.Bold), 0, 0);
             lateral.Controls.Add(new AccesoButton { Text = "Mi asistencia", Principal = true, Dock = DockStyle.Fill, TabStop = false }, 0, 1);
             var identidad = Etiqueta(sesion.Nombre + Environment.NewLine + sesion.Rol, 10);
             lateral.Controls.Add(identidad, 0, 3);
-            var salir = new AccesoButton { Text = "Cerrar sesión", Dock = DockStyle.Fill, BackColor = Color.FromArgb(48, 30, 68) };
+            var tema = TemaAplicacion.CrearSelectorTema();
+            lateral.Controls.Add(tema, 0, 4);
+            var salir = new AccesoButton { Text = "Cerrar sesión", Dock = DockStyle.Fill };
             salir.Click += (sender, args) => Close();
-            lateral.Controls.Add(salir, 0, 4);
+            lateral.Controls.Add(salir, 0, 5);
 
             var contenido = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(28) };
             contenido.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -64,7 +69,9 @@ namespace WindowsForms_Presentacion
             contenido.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
             contenido.Controls.Add(Etiqueta("Mi asistencia", 26, FontStyle.Bold), 0, 0);
-            contenido.Controls.Add(Etiqueta("Consulta tus entradas y salidas registradas.", 11), 0, 1);
+            var descripcion = Etiqueta("Consulta tus entradas y salidas registradas.", 11);
+            TemaAplicacion.DefinirRol(descripcion, RolTema.TextoSecundario);
+            contenido.Controls.Add(descripcion, 0, 1);
 
             var filtros = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true };
             desde.Value = DateTime.Today.AddDays(-30);
@@ -90,14 +97,11 @@ namespace WindowsForms_Presentacion
             registros.RowHeadersVisible = false;
             registros.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             registros.MultiSelect = false;
-            registros.BackgroundColor = Color.FromArgb(24, 18, 35);
             registros.BorderStyle = BorderStyle.None;
             registros.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-            registros.GridColor = Color.FromArgb(55, 38, 73);
             registros.EnableHeadersVisualStyles = false;
-            registros.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(49, 30, 70), ForeColor = Color.White, Padding = new Padding(8) };
-            registros.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(24, 18, 35), ForeColor = Color.FromArgb(231, 220, 245), SelectionBackColor = Color.FromArgb(85, 48, 124), SelectionForeColor = Color.White, Padding = new Padding(8) };
-            registros.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(30, 22, 43);
+            registros.ColumnHeadersDefaultCellStyle.Padding = new Padding(8);
+            registros.DefaultCellStyle.Padding = new Padding(8);
             registros.RowTemplate.Height = 42;
             registros.AccessibleName = "Marcaciones del empleado";
             Columna("Fecha", "Fecha", "dd/MM/yyyy");
@@ -107,7 +111,7 @@ namespace WindowsForms_Presentacion
             contenido.Controls.Add(registros, 0, 3);
             estado.Dock = DockStyle.Fill;
             estado.TextAlign = ContentAlignment.MiddleLeft;
-            estado.ForeColor = Color.FromArgb(204, 185, 225);
+            TemaAplicacion.DefinirRol(estado, RolTema.TextoSecundario);
             estado.AccessibleDescription = "Estado de la consulta";
             contenido.Controls.Add(estado, 0, 4);
             raiz.Controls.Add(lateral, 0, 0);

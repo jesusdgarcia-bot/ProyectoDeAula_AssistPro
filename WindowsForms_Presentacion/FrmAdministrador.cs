@@ -12,12 +12,12 @@ namespace WindowsForms_Presentacion
 {
     internal sealed partial class FrmAdministrador : Form
     {
-        private static readonly Color Fondo = Color.FromArgb(13, 10, 20);
-        private static readonly Color FondoLateral = Color.FromArgb(25, 16, 39);
-        private static readonly Color TextoSecundario = Color.FromArgb(204, 185, 225);
-        private static readonly Color FondoTabla = Color.FromArgb(24, 18, 35);
-        private static readonly Color EncabezadoTabla = Color.FromArgb(49, 30, 70);
-        private static readonly Color SeleccionTabla = Color.FromArgb(85, 48, 124);
+        private static Color Fondo => TemaAplicacion.Actual.Fondo;
+        private static Color FondoLateral => TemaAplicacion.Actual.Lateral;
+        private static Color TextoSecundario => TemaAplicacion.Actual.TextoSecundario;
+        private static Color FondoTabla => TemaAplicacion.Actual.Superficie;
+        private static Color EncabezadoTabla => TemaAplicacion.Actual.EncabezadoTabla;
+        private static Color SeleccionTabla => TemaAplicacion.Actual.SeleccionTabla;
         private readonly List<Vista> vistas = new List<Vista>();
         private readonly ListBox modulos = new ListBox();
         private readonly DataGridView tabla = new DataGridView();
@@ -58,11 +58,13 @@ namespace WindowsForms_Presentacion
             var area = Screen.FromPoint(Cursor.Position).WorkingArea;
             ClientSize = new Size(Math.Min(1120, area.Width - 64), Math.Min(740, area.Height - 64));
             MinimumSize = new Size(Math.Min(800, area.Width), Math.Min(520, area.Height));
+            WindowState = FormWindowState.Maximized;
             BackColor = Fondo;
-            ForeColor = Color.White;
+            ForeColor = TemaAplicacion.Actual.Texto;
             Font = new Font("Segoe UI", 11F);
 
             ConstruirInterfaz(sesion);
+            ConfigurarDashboard();
             ConfigurarOperaciones();
             ConfigurarCatalogos();
 
@@ -70,7 +72,12 @@ namespace WindowsForms_Presentacion
             actualizar.Click += async (origen, evento) => await CargarVistaAsync();
             agregar.Click += async (origen, evento) => await AgregarRegistroAsync();
             filtrarEmpleado.Click += async (origen, evento) => await FiltrarEmpleadoAsync();
-            Shown += (origen, evento) => modulos.SelectedIndex = 0;
+            Shown += (origen, evento) =>
+            {
+                AjustarAlturaModulos();
+                modulos.SelectedIndex = 0;
+            };
+            TemaAplicacion.Registrar(this);
         }
 
         private void ConstruirInterfaz(SesionUsuario sesion)
@@ -90,6 +97,7 @@ namespace WindowsForms_Presentacion
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5,
                 Padding = new Padding(20, 28, 20, 20), BackColor = FondoLateral
             };
+            TemaAplicacion.DefinirRol(panel, RolTema.Lateral);
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -105,6 +113,7 @@ namespace WindowsForms_Presentacion
             modulos.BorderStyle = BorderStyle.None;
             modulos.BackColor = FondoLateral;
             modulos.ForeColor = TextoSecundario;
+            TemaAplicacion.DefinirRol(modulos, RolTema.Lateral);
             modulos.AccessibleName = "Módulos";
             modulos.IntegralHeight = false;
             modulos.DrawMode = DrawMode.OwnerDrawFixed;
@@ -117,14 +126,16 @@ namespace WindowsForms_Presentacion
                 Text = sesion.Nombre, Dock = DockStyle.Fill, AutoEllipsis = true, UseMnemonic = false,
                 TextAlign = ContentAlignment.MiddleLeft
             }, 0, 2);
-            panel.Controls.Add(new Label
+            var rolUsuario = new Label
             {
                 Text = sesion.Rol, Dock = DockStyle.Fill, AutoEllipsis = true, UseMnemonic = false,
                 ForeColor = TextoSecundario
-            }, 0, 3);
+            };
+            TemaAplicacion.DefinirRol(rolUsuario, RolTema.TextoSecundario);
+            panel.Controls.Add(rolUsuario, 0, 3);
             var salir = new AccesoButton
             {
-                Text = "Cerrar sesión", Dock = DockStyle.Fill, BackColor = Color.FromArgb(48, 30, 68)
+                Text = "Cerrar sesión", Dock = DockStyle.Fill
             };
             salir.Click += (origen, evento) => Close();
             panel.Controls.Add(salir, 0, 4);
@@ -143,6 +154,7 @@ namespace WindowsForms_Presentacion
         private void DibujarModulo(object origen, DrawItemEventArgs evento)
         {
             if (evento.Index < 0) return;
+            var tema = TemaAplicacion.Actual;
             bool seleccionado = (evento.State & DrawItemState.Selected) != 0;
             using (var fondo = new SolidBrush(FondoLateral))
                 evento.Graphics.FillRectangle(fondo, evento.Bounds);
@@ -152,17 +164,17 @@ namespace WindowsForms_Presentacion
                 var estadoGrafico = evento.Graphics.Save();
                 evento.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 using (var contorno = DibujoAcceso.Redondeado(rectangulo, 12))
-                using (var fondo = new LinearGradientBrush(rectangulo, Color.FromArgb(142, 69, 201),
-                    Color.FromArgb(99, 39, 158), 90F))
+                using (var fondo = new LinearGradientBrush(rectangulo, tema.PrimarioInicio,
+                    tema.PrimarioFin, 90F))
                     evento.Graphics.FillPath(fondo, contorno);
                 evento.Graphics.Restore(estadoGrafico);
             }
             TextRenderer.DrawText(evento.Graphics, modulos.Items[evento.Index].ToString(), modulos.Font,
-                Rectangle.Inflate(rectangulo, -12, 0), seleccionado ? Color.White : TextoSecundario,
+                Rectangle.Inflate(rectangulo, -12, 0), seleccionado ? tema.TextoPrimario : TextoSecundario,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             if ((evento.State & DrawItemState.Focus) != 0)
                 ControlPaint.DrawFocusRectangle(evento.Graphics, Rectangle.Inflate(rectangulo, -4, -4),
-                    Color.White, FondoLateral);
+                    tema.BordeFoco, FondoLateral);
         }
 
         private Control CrearContenido()
@@ -178,29 +190,61 @@ namespace WindowsForms_Presentacion
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            titulo.AutoSize = true;
+            var encabezado = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Height = 50,
+                Margin = new Padding(0, 0, 0, 16)
+            };
+            encabezado.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            encabezado.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            encabezado.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            titulo.Dock = DockStyle.Fill;
+            titulo.AutoEllipsis = true;
             titulo.Font = new Font(Font.FontFamily, 26, FontStyle.Bold);
-            titulo.Margin = new Padding(0, 0, 0, 16);
-            panel.Controls.Add(titulo, 0, 0);
+            titulo.Margin = Padding.Empty;
+            titulo.TextAlign = ContentAlignment.MiddleLeft;
+            encabezado.Controls.Add(titulo, 0, 0);
+            var selectorTema = TemaAplicacion.CrearSelectorTema();
+            selectorTema.Margin = new Padding(8, 0, 0, 0);
+            encabezado.Controls.Add(selectorTema, 1, 0);
+            panel.Controls.Add(encabezado, 0, 0);
 
             var acciones = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 12) };
             filtros.AutoSize = true;
             filtros.WrapContents = false;
             filtros.Margin = Padding.Empty;
-            AgregarFecha("Desde", desde, DateTime.Today.AddDays(-30));
-            AgregarFecha("Hasta", hasta, DateTime.Today);
+            AgregarFecha(filtros, "Desde", desde, DateTime.Today.AddDays(-30));
+            AgregarFecha(filtros, "Hasta", hasta, DateTime.Today);
+            acciones.Controls.Add(CrearFiltrosDashboard());
             acciones.Controls.Add(filtros);
             acciones.Controls.Add(agregar);
             acciones.Controls.Add(actualizar);
             acciones.Controls.Add(filtrarEmpleado);
             panel.Controls.Add(acciones, 0, 1);
 
-            tabla.Dock = DockStyle.Fill;
             tabla.AccessibleName = "Registros del módulo";
+            ConfigurarTabla(tabla);
+            var contenido = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+            contenido.Controls.Add(tabla);
+            contenido.Controls.Add(CrearContenidoDashboard());
+            panel.Controls.Add(contenido, 0, 2);
+
+            estado.AutoSize = true;
+            estado.AccessibleDescription = "Estado de la consulta";
+            estado.ForeColor = TextoSecundario;
+            TemaAplicacion.DefinirRol(estado, RolTema.TextoSecundario);
+            estado.Margin = new Padding(0, 14, 0, 0);
+            panel.Controls.Add(estado, 0, 3);
+            return panel;
+        }
+
+        private static void ConfigurarTabla(DataGridView tabla)
+        {
+            tabla.Dock = DockStyle.Fill;
             tabla.BackgroundColor = FondoTabla;
             tabla.BorderStyle = BorderStyle.None;
             tabla.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-            tabla.GridColor = Color.FromArgb(55, 38, 73);
+            tabla.GridColor = TemaAplicacion.Actual.LineaTabla;
             tabla.ReadOnly = true;
             tabla.AllowUserToAddRows = false;
             tabla.AllowUserToDeleteRows = false;
@@ -212,31 +256,25 @@ namespace WindowsForms_Presentacion
             tabla.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             tabla.EnableHeadersVisualStyles = false;
             tabla.ColumnHeadersDefaultCellStyle.BackColor = EncabezadoTabla;
-            tabla.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            tabla.ColumnHeadersDefaultCellStyle.ForeColor = TemaAplicacion.Actual.Texto;
             tabla.ColumnHeadersDefaultCellStyle.SelectionBackColor = EncabezadoTabla;
-            tabla.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
+            tabla.ColumnHeadersDefaultCellStyle.SelectionForeColor = TemaAplicacion.Actual.Texto;
             tabla.ColumnHeadersDefaultCellStyle.Padding = new Padding(8);
             tabla.DefaultCellStyle.BackColor = FondoTabla;
-            tabla.DefaultCellStyle.ForeColor = Color.FromArgb(231, 220, 245);
+            tabla.DefaultCellStyle.ForeColor = TemaAplicacion.Actual.TextoTabla;
             tabla.DefaultCellStyle.Padding = new Padding(8, 0, 5, 0);
             tabla.DefaultCellStyle.SelectionBackColor = SeleccionTabla;
-            tabla.DefaultCellStyle.SelectionForeColor = Color.White;
-            tabla.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(30, 22, 43);
+            tabla.DefaultCellStyle.SelectionForeColor = TemaAplicacion.Actual.TextoSeleccionTabla;
+            tabla.AlternatingRowsDefaultCellStyle.BackColor = TemaAplicacion.Actual.AlternanciaTabla;
             tabla.RowTemplate.Height = 42;
-            panel.Controls.Add(tabla, 0, 2);
-
-            estado.AutoSize = true;
-            estado.AccessibleDescription = "Estado de la consulta";
-            estado.ForeColor = TextoSecundario;
-            estado.Margin = new Padding(0, 14, 0, 0);
-            panel.Controls.Add(estado, 0, 3);
-            return panel;
         }
 
-        private void AgregarFecha(string nombre, DateTimePicker selector, DateTime fecha)
+        private static void AgregarFecha(FlowLayoutPanel filtros, string nombre, DateTimePicker selector, DateTime fecha)
         {
             var campo = new Panel { Size = new Size(150, 62), Margin = new Padding(0, 0, 12, 0) };
-            campo.Controls.Add(new Label { Text = nombre, AutoSize = true, ForeColor = TextoSecundario });
+            var etiqueta = new Label { Text = nombre, AutoSize = true, ForeColor = TextoSecundario };
+            TemaAplicacion.DefinirRol(etiqueta, RolTema.TextoSecundario);
+            campo.Controls.Add(etiqueta);
             selector.AccessibleName = nombre;
             selector.Location = new Point(0, 24);
             selector.Width = 150;
@@ -265,6 +303,7 @@ namespace WindowsForms_Presentacion
             cargando = enCurso;
             if (IsDisposed || Disposing) return;
             modulos.Enabled = actualizar.Enabled = filtros.Enabled = agregar.Enabled = filtrarEmpleado.Enabled = !enCurso;
+            filtrosDashboard.Enabled = contenidoDashboard.Enabled = !enCurso;
         }
 
         private async Task AgregarRegistroAsync()
@@ -307,14 +346,23 @@ namespace WindowsForms_Presentacion
             var vista = vistas[modulos.SelectedIndex];
             titulo.Text = modulos.SelectedItem.ToString();
             filtros.Visible = vista.UsaFechas;
+            filtrosDashboard.Visible = vista.EsDashboard;
+            contenidoDashboard.Visible = vista.EsDashboard;
+            tabla.Visible = !vista.EsDashboard;
             filtrarEmpleado.Visible = vista.UsaFechas;
             filtrarEmpleado.Text = idEmpleadoFiltrado.HasValue ? "Cambiar empleado" : "Filtrar empleado";
             agregar.Visible = vista.AgregarAsync != null;
-            int separacion = vista.UsaFechas ? 22 : 0;
+            int separacion = vista.UsaFechas || vista.EsDashboard ? 22 : 0;
             agregar.Margin = new Padding(0, separacion, 8, 0);
             actualizar.Margin = new Padding(0, separacion, 8, 0);
             filtrarEmpleado.Margin = new Padding(0, separacion, 0, 0);
             agregar.Text = vista.UsaFechas ? "Registrar marcación" : "Agregar";
+            if (vista.EsDashboard)
+            {
+                await CargarDashboardAsync();
+                return;
+            }
+
             tabla.Columns.Clear();
             foreach (string columna in vista.Columnas)
             {
@@ -365,6 +413,7 @@ namespace WindowsForms_Presentacion
         {
             internal string[] Columnas { get; set; }
             internal bool UsaFechas { get; set; }
+            internal bool EsDashboard { get; set; }
             internal Func<Task<bool>> AgregarAsync { get; set; }
             internal Func<Task<object[][]>> CargarAsync { get; set; }
         }

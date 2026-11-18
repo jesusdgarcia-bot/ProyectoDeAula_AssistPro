@@ -119,12 +119,9 @@ namespace WindowsForms_Presentacion
 
     internal sealed class EditorRegistro : Form
     {
-        private static readonly Color Fondo = Color.FromArgb(25, 16, 39);
-        private static readonly Color FondoEntrada = Color.FromArgb(17, 12, 26);
         private readonly Label error = new Label
         {
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(255, 193, 207),
             AccessibleName = "Validación del registro",
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -135,8 +132,10 @@ namespace WindowsForms_Presentacion
             Font = new Font("Segoe UI", 11);
             AutoScaleDimensions = new SizeF(96, 96);
             AutoScaleMode = AutoScaleMode.Dpi;
-            BackColor = Fondo;
-            ForeColor = Color.White;
+            BackColor = TemaAplicacion.Actual.Superficie;
+            ForeColor = TemaAplicacion.Actual.Texto;
+            TemaAplicacion.DefinirRol(this, RolTema.Superficie);
+            TemaAplicacion.DefinirRol(error, RolTema.Error);
             StartPosition = FormStartPosition.CenterParent;
             ShowInTaskbar = false;
             MinimizeBox = false;
@@ -153,11 +152,22 @@ namespace WindowsForms_Presentacion
             cuerpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
             cuerpo.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             cuerpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
-            cuerpo.Controls.Add(new Label
+            var encabezado = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty
+            };
+            encabezado.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            encabezado.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            encabezado.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            encabezado.Controls.Add(new Label
             {
                 Text = titulo, Dock = DockStyle.Fill, Font = new Font(Font.FontFamily, 19, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false
+                TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false, AutoEllipsis = true
             }, 0, 0);
+            var selectorTema = TemaAplicacion.CrearSelectorTema();
+            selectorTema.Margin = new Padding(8, 0, 0, 0);
+            encabezado.Controls.Add(selectorTema, 1, 0);
+            cuerpo.Controls.Add(encabezado, 0, 0);
 
             var desplazamiento = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
             var formulario = new TableLayoutPanel
@@ -171,17 +181,18 @@ namespace WindowsForms_Presentacion
                 CampoRegistro campo = campos[indice];
                 formulario.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 formulario.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                formulario.Controls.Add(new Label
+                var etiqueta = new Label
                 {
                     Text = campo.Etiqueta, AutoSize = true, UseMnemonic = false,
-                    ForeColor = Color.FromArgb(204, 185, 225), Margin = new Padding(0, 3, 0, 4)
-                }, 0, indice * 2);
+                    Margin = new Padding(0, 3, 0, 4)
+                };
+                TemaAplicacion.DefinirRol(etiqueta, RolTema.TextoSecundario);
+                formulario.Controls.Add(etiqueta, 0, indice * 2);
                 Control entrada = campo.Entrada;
                 entrada.Dock = DockStyle.Fill;
                 entrada.Margin = new Padding(0, 0, 0, 10);
                 entrada.TabIndex = indice;
-                entrada.BackColor = FondoEntrada;
-                entrada.ForeColor = Color.White;
+                TemaAplicacion.DefinirRol(entrada, RolTema.Entrada);
                 formulario.Controls.Add(entrada, 0, indice * 2 + 1);
             }
             desplazamiento.Controls.Add(formulario);
@@ -200,7 +211,7 @@ namespace WindowsForms_Presentacion
             var guardar = new AccesoButton
             {
                 Text = "Guardar", Principal = true, Size = new Size(114, 40),
-                BackColor = Color.FromArgb(139, 80, 224), Margin = Padding.Empty
+                Margin = Padding.Empty
             };
             guardar.Click += (origen, evento) =>
             {
@@ -219,7 +230,7 @@ namespace WindowsForms_Presentacion
             {
                 Text = "Cancelar", DialogResult = DialogResult.Cancel,
                 CausesValidation = false, Size = new Size(114, 40),
-                BackColor = Color.FromArgb(48, 30, 68), Margin = new Padding(0, 0, 8, 0)
+                Margin = new Padding(0, 0, 8, 0)
             };
             botones.Controls.Add(guardar);
             botones.Controls.Add(cancelar);
@@ -231,6 +242,7 @@ namespace WindowsForms_Presentacion
             CancelButton = cancelar;
             if (campos.Length > 0)
                 Shown += (origen, evento) => campos[0].Entrada.Focus();
+            TemaAplicacion.Registrar(this);
         }
     }
 }

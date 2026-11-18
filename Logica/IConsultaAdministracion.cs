@@ -7,6 +7,7 @@ namespace Logica
 {
     public interface IConsultaAdministracion
     {
+        Task<ResumenDashboard> ObtenerDashboardAsync(SesionUsuario sesion, DateTime desde, DateTime hasta);
         Task<List<RegistroAsistencia>> ConsultarAsistenciaAsync(DateTime desde, DateTime hasta, int? idEmpleado = null);
         Task<List<Empleado>> ListarEmpleadosAsync();
         Task<List<CuentaAdministrada>> ListarUsuariosAsync();

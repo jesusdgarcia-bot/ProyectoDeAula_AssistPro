@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.Entity;
 using System.Data.Entity.Infrastructure;
 using System.Data.Entity.Validation;
@@ -25,6 +26,74 @@ namespace Persistencia
             if (string.IsNullOrWhiteSpace(estadoActivo) || estadoActivo.Length != 1)
                 throw new ArgumentException("El estado activo debe tener un carácter.", nameof(estadoActivo));
             this.estadoActivo = estadoActivo;
+        }
+
+        public async Task<ResumenDashboard> ObtenerDashboardAsync(SesionUsuario sesion, DateTime desde, DateTime hasta)
+        {
+            ExigirSesionAdministrativa(sesion);
+            DateTime inicio = desde.Date;
+            if (inicio > hasta.Date || hasta.Date == DateTime.MaxValue.Date)
+                throw new ArgumentException("El rango de fechas es inválido.");
+            DateTime fin = hasta.Date.AddDays(1);
+
+            using (var contexto = new AssistProContext())
+            {
+                await contexto.Database.Connection.OpenAsync().ConfigureAwait(false);
+                using (var transaccion = contexto.Database.BeginTransaction(IsolationLevel.Serializable))
+                {
+                    await ValidarAccesoAdministrativoAsync(contexto, sesion).ConfigureAwait(false);
+                    int empleadosActivos = await contexto.Empleados.CountAsync(e => e.Estado == estadoActivo)
+                        .ConfigureAwait(false);
+
+                    var porDia = await contexto.Database.SqlQuery<MarcacionesDiaDashboard>($@"
+                        SELECT TRUNC(FECHA) AS ""Dia"", COUNT(*) AS ""Total"",
+                               COUNT(CASE WHEN UPPER(TRIM(TIPO_MARCACION)) = 'ENTRADA' THEN 1 END) AS ""Entradas"",
+                               COUNT(CASE WHEN UPPER(TRIM(TIPO_MARCACION)) = 'SALIDA' THEN 1 END) AS ""Salidas""
+                        FROM {AssistProContext.Esquema}.REGISTRO_ASISTENCIA
+                        WHERE FECHA >= :inicio AND FECHA < :fin
+                        GROUP BY TRUNC(FECHA)
+                        ORDER BY TRUNC(FECHA)", ParametroFecha("inicio", inicio), ParametroFecha("fin", fin))
+                        .ToListAsync().ConfigureAwait(false);
+
+                    var porDepartamento = await contexto.Database.SqlQuery<MarcacionesDepartamentoDashboard>($@"
+                        SELECT s.NOMBRE_SEDE AS ""Sede"", d.NOMBRE_DEPARTAMENTO AS ""Departamento"",
+                               COUNT(DISTINCT r.ID_EMPLEADO) AS ""EmpleadosConMarcaciones"",
+                               COUNT(*) AS ""TotalMarcaciones""
+                        FROM {AssistProContext.Esquema}.REGISTRO_ASISTENCIA r
+                        JOIN {AssistProContext.Esquema}.EMPLEADO e ON e.ID_EMPLEADO = r.ID_EMPLEADO
+                        JOIN {AssistProContext.Esquema}.DEPARTAMENTO d ON d.ID_DEPARTAMENTO = e.ID_DEPARTAMENTO
+                        JOIN {AssistProContext.Esquema}.SEDE s ON s.ID_SEDE = d.ID_SEDE
+                        WHERE r.FECHA >= :inicio AND r.FECHA < :fin
+                        GROUP BY s.ID_SEDE, s.NOMBRE_SEDE, d.ID_DEPARTAMENTO, d.NOMBRE_DEPARTAMENTO
+                        ORDER BY COUNT(*) DESC, s.NOMBRE_SEDE, d.NOMBRE_DEPARTAMENTO, d.ID_DEPARTAMENTO",
+                        ParametroFecha("inicio", inicio), ParametroFecha("fin", fin)).ToListAsync().ConfigureAwait(false);
+
+                    var novedadesPorEstado = await contexto.Database.SqlQuery<NovedadesEstadoDashboard>($@"
+                        SELECT ESTADO_APROBACION AS ""Estado"", COUNT(*) AS ""Total""
+                        FROM {AssistProContext.Esquema}.NOVEDAD
+                        WHERE FECHA_INICIO < :fin AND (FECHA_FIN IS NULL OR FECHA_FIN >= :inicio)
+                        GROUP BY ESTADO_APROBACION
+                        ORDER BY COUNT(*) DESC, ESTADO_APROBACION",
+                        ParametroFecha("fin", fin), ParametroFecha("inicio", inicio)).ToListAsync().ConfigureAwait(false);
+
+                    transaccion.Commit();
+                    return new ResumenDashboard
+                    {
+                        EmpleadosActivos = empleadosActivos,
+                        EmpleadosConMarcaciones = porDepartamento.Sum(d => d.EmpleadosConMarcaciones),
+                        TotalMarcaciones = porDia.Sum(d => d.Total),
+                        TotalNovedades = novedadesPorEstado.Sum(n => n.Total),
+                        MarcacionesPorDia = porDia,
+                        MarcacionesPorDepartamento = porDepartamento,
+                        NovedadesPorEstado = novedadesPorEstado
+                    };
+                }
+            }
+        }
+
+        private static OracleParameter ParametroFecha(string nombre, DateTime valor)
+        {
+            return new OracleParameter(nombre, OracleDbType.Date) { Value = valor };
         }
 
         public Task<List<RegistroAsistencia>> ConsultarAsistenciaAsync(DateTime desde, DateTime hasta, int? idEmpleado = null)
@@ -122,13 +191,7 @@ namespace Persistencia
             ExigirSesionAdministrativa(sesion);
             using (var contexto = new AssistProContext())
             {
-                var acceso = await contexto.Usuarios.AsNoTracking()
-                    .Where(u => u.IdUsuario == sesion.IdUsuario && u.IdEmpleado == sesion.IdEmpleado)
-                    .Select(u => new { u.Estado, EstadoEmpleado = u.Empleado.Estado, u.Rol.NombreRol })
-                    .SingleOrDefaultAsync().ConfigureAwait(false);
-                if (acceso == null || acceso.Estado?.Trim() != estadoActivo ||
-                    acceso.EstadoEmpleado?.Trim() != estadoActivo || !SesionUsuario.EsRolAdministrador(acceso.NombreRol))
-                    throw new UnauthorizedAccessException("La cuenta ya no tiene acceso administrativo.");
+                await ValidarAccesoAdministrativoAsync(contexto, sesion).ConfigureAwait(false);
 
                 contexto.Set<T>().Add(registro);
                 if (contexto.ChangeTracker.Entries().Count() != 1)
@@ -155,6 +218,17 @@ namespace Persistencia
                     throw;
                 }
             }
+        }
+
+        private async Task ValidarAccesoAdministrativoAsync(AssistProContext contexto, SesionUsuario sesion)
+        {
+            var acceso = await contexto.Usuarios.AsNoTracking()
+                .Where(u => u.IdUsuario == sesion.IdUsuario && u.IdEmpleado == sesion.IdEmpleado)
+                .Select(u => new { u.Estado, EstadoEmpleado = u.Empleado.Estado, u.Rol.NombreRol })
+                .SingleOrDefaultAsync().ConfigureAwait(false);
+            if (acceso == null || acceso.Estado?.Trim() != estadoActivo ||
+                acceso.EstadoEmpleado?.Trim() != estadoActivo || !SesionUsuario.EsRolAdministrador(acceso.NombreRol))
+                throw new UnauthorizedAccessException("La cuenta ya no tiene acceso administrativo.");
         }
 
         private static void ExigirSesionAdministrativa(SesionUsuario sesion)
