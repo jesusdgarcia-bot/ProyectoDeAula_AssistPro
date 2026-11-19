@@ -12,7 +12,7 @@ namespace WindowsForms_Presentacion
     {
         private void ConfigurarOperaciones()
         {
-            AgregarVista("Asistencia", new[] { "ID", "Empleado", "Fecha", "Hora", "Marcación", "Dispositivo", "Verificación" },
+            AgregarVista("Marcaciones", new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Dispositivo", "Verificación" },
                 () => consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado, textoBuscado),
                 registro => new object[]
                 {
@@ -21,7 +21,7 @@ namespace WindowsForms_Presentacion
                     registro.MetodoVerificacion
                 }, () => RegistrarMarcacionAsync(), usaFechas: true, editar: RegistrarMarcacionAsync,
                 eliminar: registro => consulta.EliminarAsync<RegistroAsistencia>(sesion, registro.IdRegistro));
-            AgregarVista("Empleados", new[] { "ID", "Nombre", "Documento", "Departamento", "Cargo", "Estado" },
+            AgregarVista("Personal administrativo", new[] { "ID", "Nombre", "Documento", "Área / departamento", "Cargo", "Estado" },
                 consulta.ListarEmpleadosAsync, empleado => new object[]
                 {
                     empleado.IdEmpleado, NombreEmpleado(empleado), empleado.NumeroDocumento,
@@ -34,7 +34,7 @@ namespace WindowsForms_Presentacion
                     cuenta.IdUsuario, cuenta.NombreUsuario, cuenta.Empleado, cuenta.Rol, cuenta.Estado
                 }, () => AgregarUsuarioAsync(), editar: AgregarUsuarioAsync,
                 eliminar: cuenta => consulta.EliminarAsync<Usuario>(sesion, cuenta.IdUsuario));
-            AgregarVista("Asignaciones", new[] { "Empleado", "Horario", "Desde", "Hasta" },
+            AgregarVista("Horarios asignados", new[] { "Personal", "Horario", "Desde", "Hasta" },
                 consulta.ListarAsignacionesAsync, asignacion => new object[]
                 {
                     NombreEmpleado(asignacion.Empleado), asignacion.Horario?.NombreHorario,
@@ -103,10 +103,10 @@ namespace WindowsForms_Presentacion
             {
                 var empleados = await consulta.ListarEmpleadosAsync();
                 if (IsDisposed || Disposing) return;
-                var opciones = new[] { new { Id = 0, Nombre = "Todos los empleados" } }.Concat(
+                var opciones = new[] { new { Id = 0, Nombre = "Todo el personal" } }.Concat(
                     empleados.Select(e => new { Id = e.IdEmpleado, Nombre = NombreEmpleado(e) + " · " + e.NumeroDocumento }));
-                var empleado = CampoRegistro.Elegir("Empleado", opciones, e => e.Nombre, e => e.Id);
-                using (var editor = new EditorRegistro("Filtrar por empleado", empleado))
+                var empleado = CampoRegistro.Elegir("Personal", opciones, e => e.Nombre, e => e.Id);
+                using (var editor = new EditorRegistro("Filtrar personal", empleado))
                 {
                     if (editor.ShowDialog(this) != DialogResult.OK) return;
                     idEmpleadoFiltrado = empleado.ValorId == 0 ? (int?)null : empleado.ValorId;
@@ -180,7 +180,7 @@ namespace WindowsForms_Presentacion
             var estadoEmpleado = original == null ? null : CampoEstado(original.Estado);
             var campos = new List<CampoRegistro> { tipo, documento, nombres, apellidos, correo, telefono, nacimiento, ingreso, departamento, cargo };
             if (estadoEmpleado != null) campos.Add(estadoEmpleado);
-            return await GuardarRegistroAsync(original == null ? "Agregar empleado" : "Actualizar empleado", original, () =>
+            return await GuardarRegistroAsync(original == null ? "Agregar personal administrativo" : "Actualizar datos del personal", original, () =>
             {
                 if (nacimiento.ValorFechaOpcional?.Date > ingreso.ValorFecha.Date)
                     throw new ArgumentException("El nacimiento debe ser anterior o igual al ingreso.");

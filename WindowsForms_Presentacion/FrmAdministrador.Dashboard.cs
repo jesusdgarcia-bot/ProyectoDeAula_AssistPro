@@ -20,7 +20,7 @@ namespace WindowsForms_Presentacion
 
         private void ConfigurarDashboard()
         {
-            modulos.Items.Add("Dashboard");
+            modulos.Items.Add("Panel de asistencia");
             vistas.Add(new Vista { EsDashboard = true });
             MostrarReporteDashboard(0);
         }
@@ -54,13 +54,13 @@ namespace WindowsForms_Presentacion
             var indicadores = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, Margin = Padding.Empty, ColumnCount = 4, RowCount = 1,
-                AccessibleName = "Indicadores de la empresa"
+                AccessibleName = "Indicadores de asistencia del personal"
             };
             indicadores.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             for (int indice = 0; indice < valoresDashboard.Length; indice++)
                 indicadores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-            indicadores.Controls.Add(CrearIndicador(0, "Empleados\nactivos hoy", RolTema.AcentoMorado), 0, 0);
-            indicadores.Controls.Add(CrearIndicador(1, "Empleados con\nmarcaciones", RolTema.AcentoAzul), 1, 0);
+            indicadores.Controls.Add(CrearIndicador(0, "Personal\nactivo hoy", RolTema.AcentoMorado), 0, 0);
+            indicadores.Controls.Add(CrearIndicador(1, "Personal con\nmarcaciones", RolTema.AcentoAzul), 1, 0);
             indicadores.Controls.Add(CrearIndicador(2, "Marcaciones\ndel periodo", RolTema.AcentoVerde), 2, 0);
             indicadores.Controls.Add(CrearIndicador(3, "Novedades\ndel periodo", RolTema.AcentoNaranja), 3, 0);
             contenidoDashboard.Controls.Add(indicadores, 0, 0);
@@ -164,7 +164,7 @@ namespace WindowsForms_Presentacion
             }
 
             CambiarCarga(true);
-            estado.Text = "Consultando estadísticas de la empresa…";
+            estado.Text = "Consultando estadísticas de asistencia…";
             try
             {
                 var resumen = await consulta.ObtenerDashboardAsync(sesion, inicio, fin);
@@ -181,7 +181,7 @@ namespace WindowsForms_Presentacion
                 if (IsDisposed || Disposing) return;
                 LimpiarDashboard();
                 estado.Text = error is UnauthorizedAccessException ? error.Message
-                    : "No se pudo cargar el dashboard. Pulsa Actualizar vista.";
+                    : "No se pudo cargar el panel de asistencia. Pulsa Actualizar vista.";
             }
             finally
             {

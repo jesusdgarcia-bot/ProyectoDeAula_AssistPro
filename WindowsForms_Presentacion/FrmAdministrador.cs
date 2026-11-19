@@ -34,7 +34,7 @@ namespace WindowsForms_Presentacion
         };
         private readonly AccesoButton filtrarEmpleado = new AccesoButton
         {
-            Text = "Filtrar empleado", BackColor = SeleccionTabla, Size = new Size(154, 34), Plano = true
+            Text = "Filtrar personal", BackColor = SeleccionTabla, Size = new Size(154, 34), Plano = true
         };
         private readonly AccesoButton editar = new AccesoButton
         {
@@ -75,7 +75,7 @@ namespace WindowsForms_Presentacion
             this.sesion = sesion;
             this.consulta = consulta;
 
-            Text = "AssistPRO | Administración";
+            Text = "AssistPRO | Gestión de Talento Humano · San Martín";
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Dpi;
             var area = Screen.FromPoint(Cursor.Position).WorkingArea;
@@ -580,7 +580,7 @@ namespace WindowsForms_Presentacion
             contenidoDashboard.Visible = vista.EsDashboard;
             tabla.Visible = !vista.EsDashboard;
             filtrarEmpleado.Visible = vista.UsaFechas;
-            filtrarEmpleado.Text = idEmpleadoFiltrado.HasValue ? "Cambiar empleado" : "Filtrar empleado";
+            filtrarEmpleado.Text = idEmpleadoFiltrado.HasValue ? "Cambiar filtro" : "Filtrar personal";
             agregar.Visible = vista.AgregarAsync != null;
             editar.Visible = vista.EditarAsync != null;
             eliminar.Visible = vista.EliminarAsync != null;

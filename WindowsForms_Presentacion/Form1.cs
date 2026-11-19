@@ -212,10 +212,10 @@ namespace WindowsForms_Presentacion
             presentacion.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             presentacion.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             presentacion.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
-            var titulo = Texto("Gestión de asistencia\npara tu empresa.", 32, RolTema.Normal, FontStyle.Bold);
+            var titulo = Texto("Gestión de asistencia\npara personal administrativo.", 32, RolTema.Normal, FontStyle.Bold);
             titulo.Dock = DockStyle.Fill;
             titulo.Margin = Padding.Empty;
-            var descripcion = Texto("Consulta marcaciones, administra el personal y revisa los reportes de tu empresa.",
+            var descripcion = Texto("Caso de estudio propuesto · Sede San Martín\nE.S.E. Hospital Eduardo Arredondo Daza, Valledupar.",
                 12, RolTema.TextoSecundario);
             descripcion.Dock = DockStyle.Fill;
             descripcion.Margin = new Padding(0, 20, 0, 0);
