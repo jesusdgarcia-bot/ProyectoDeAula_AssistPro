@@ -50,6 +50,7 @@
   <ItemGroup>
     <Compile Include="AssistProContext.cs" />
     <Compile Include="ConsultaAdministracion.cs" />
+    <Compile Include="RepositorioFacial.cs" />
     <Compile Include="OracleDbConfiguration.cs" />
     <Compile Include="Migrations\Configuration.cs" />
     <Compile Include="Migrations\202610190147438_InitialCreate.cs" />

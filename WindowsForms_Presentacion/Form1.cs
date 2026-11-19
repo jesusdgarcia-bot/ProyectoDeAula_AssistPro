@@ -24,6 +24,7 @@ namespace WindowsForms_Presentacion
         private readonly Logica.ServicioAutenticacion autenticacion;
         private readonly Logica.IConsultaAsistencia consultaAsistencia;
         private readonly Logica.IConsultaAdministracion consultaAdministracion;
+        private readonly Logica.ServicioReconocimientoFacial reconocimientoFacial;
         private bool autenticando;
         public Logica.SesionUsuario SesionActual { get; private set; }
         private static string EstadoActivo => System.Configuration.ConfigurationManager.AppSettings["EstadoActivo"] ?? "A";
@@ -45,6 +46,7 @@ namespace WindowsForms_Presentacion
             this.autenticacion = autenticacion ?? throw new ArgumentNullException(nameof(autenticacion));
             this.consultaAsistencia = consultaAsistencia ?? throw new ArgumentNullException(nameof(consultaAsistencia));
             this.consultaAdministracion = consultaAdministracion ?? throw new ArgumentNullException(nameof(consultaAdministracion));
+            reconocimientoFacial = new Logica.ServicioReconocimientoFacial(new Persistencia.RepositorioFacial(EstadoActivo), EstadoActivo);
             InitializeComponent();
             Text = "AssistPRO | Acceso";
             StartPosition = FormStartPosition.CenterScreen;
@@ -122,14 +124,14 @@ namespace WindowsForms_Presentacion
             estado.Font = new Font(Font.FontFamily, 10);
             estado.TextChanged += (s, e) => estado.Visible = estado.Text.Length > 0;
             Agregar(layout, estado, 10, 0);
-            Agregar(layout, Texto("Acceso biométrico · No habilitado", 9, RolTema.TextoSecundario), 24, 9);
+            Agregar(layout, Texto("Acceso biométrico", 9, RolTema.TextoSecundario), 24, 9);
             var biometria = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
             biometria.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             biometria.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             var huella = new AccesoButton { Text = "Huella dactilar", Icono = "huella", Plano = true, Height = 44, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 5, 0), Font = new Font(Font.FontFamily, 10) };
             var rostro = new AccesoButton { Text = "Rostro", Icono = "rostro", Plano = true, Height = 44, Dock = DockStyle.Fill, Margin = new Padding(5, 0, 0, 0), Font = huella.Font };
             huella.Click += (s, e) => estado.Text = "El acceso por huella aún no está habilitado. Utiliza tu usuario y contraseña.";
-            rostro.Click += (s, e) => estado.Text = "El reconocimiento facial aún no está habilitado. Utiliza tu usuario y contraseña.";
+            rostro.Click += ValidarAccesoFacial;
             biometria.Controls.Add(huella, 0, 0);
             biometria.Controls.Add(rostro, 1, 0);
             Agregar(layout, biometria, 0, 0);
@@ -354,30 +356,7 @@ namespace WindowsForms_Presentacion
                     return;
                 }
 
-                SesionActual = sesion;
-                try
-                {
-                    using (Form principal = sesion.EsAdministrador
-                        ? (Form)new FrmAdministrador(sesion, consultaAdministracion)
-                        : new FrmPrincipal(sesion, consultaAsistencia))
-                    {
-                        Hide();
-                        principal.ShowDialog();
-                    }
-                }
-                finally
-                {
-                    SesionActual = null;
-                    if (!IsDisposed)
-                    {
-                        usuario.Clear();
-                        clave.Clear();
-                        perfilAcceso.Checked = false;
-                        estado.Text = string.Empty;
-                        Show();
-                        usuario.Focus();
-                    }
-                }
+                AbrirSesion(sesion);
             }
             catch (Exception)
             {
@@ -393,6 +372,88 @@ namespace WindowsForms_Presentacion
                     perfilAcceso.Enabled = true;
                     usuario.ReadOnly = false;
                     clave.ReadOnly = false;
+                }
+            }
+        }
+
+        private async void ValidarAccesoFacial(object sender, EventArgs e)
+        {
+            if (autenticando || SesionActual != null) return;
+            autenticando = true;
+            bool accesoAdministrador = perfilAcceso.Checked;
+            var boton = (Button)sender;
+            boton.Enabled = perfilAcceso.Enabled = false;
+            usuario.ReadOnly = clave.ReadOnly = true;
+            errorUsuario.Text = errorClave.Text = string.Empty;
+            clave.Clear();
+            try
+            {
+                using (var captura = new FrmCapturaFacial("AssistPRO | Acceso por rostro", registrar: false))
+                {
+                    if (captura.ShowDialog(this) != DialogResult.OK)
+                    {
+                        estado.Text = "Reconocimiento cancelado.";
+                        return;
+                    }
+                    estado.Text = "Comparando con los rostros registrados…";
+                    var sesion = await reconocimientoFacial.AutenticarAsync(captura.Caracteristicas);
+                    if (IsDisposed) return;
+                    if (sesion == null)
+                    {
+                        estado.Text = "No se pudo reconocer tu rostro con suficiente certeza. Repite la captura o usa tu contraseña.";
+                        return;
+                    }
+                    if (sesion.EsAdministrador != accesoAdministrador)
+                    {
+                        estado.Text = "El rostro no corresponde al perfil elegido. Selecciona el perfil de tu cuenta y vuelve a intentarlo.";
+                        return;
+                    }
+                    AbrirSesion(sesion);
+                }
+            }
+            catch (InvalidOperationException error)
+            {
+                if (!IsDisposed) estado.Text = error.Message;
+            }
+            catch (Exception)
+            {
+                if (!IsDisposed) estado.Text = "No se pudo completar el acceso facial. Revisa la conexión con Oracle e inténtalo de nuevo.";
+            }
+            finally
+            {
+                autenticando = false;
+                if (!IsDisposed)
+                {
+                    boton.Enabled = perfilAcceso.Enabled = true;
+                    usuario.ReadOnly = clave.ReadOnly = false;
+                }
+            }
+        }
+
+        private void AbrirSesion(Logica.SesionUsuario sesion)
+        {
+            SesionActual = sesion;
+            try
+            {
+                using (Form principal = sesion.EsAdministrador
+                    ? (Form)new FrmAdministrador(sesion, consultaAdministracion)
+                    : new FrmPrincipal(sesion, consultaAsistencia))
+                {
+                    Hide();
+                    principal.ShowDialog();
+                }
+            }
+            finally
+            {
+                SesionActual = null;
+                if (!IsDisposed)
+                {
+                    usuario.Clear();
+                    clave.Clear();
+                    perfilAcceso.Checked = false;
+                    estado.Text = string.Empty;
+                    Show();
+                    usuario.Focus();
                 }
             }
         }

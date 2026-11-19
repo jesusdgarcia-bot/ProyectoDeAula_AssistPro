@@ -48,6 +48,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Class1.cs" />
+    <Compile Include="PlantillaFacial.cs" />
+    <Compile Include="ServicioReconocimientoFacial.cs" />
     <Compile Include="IConsultaAdministracion.cs" />
     <Compile Include="ResumenDashboard.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

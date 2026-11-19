@@ -17,6 +17,9 @@
 mono_crash.*
 
 # Build results
+# Pretrained models are downloaded and SHA256-verified by the build.
+WindowsForms_Presentacion/Modelos/*.onnx
+WindowsForms_Presentacion/Modelos/*.download
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/

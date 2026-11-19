@@ -356,7 +356,8 @@ namespace WindowsForms_Presentacion
             agregar.Margin = new Padding(0, separacion, 8, 0);
             actualizar.Margin = new Padding(0, separacion, 8, 0);
             filtrarEmpleado.Margin = new Padding(0, separacion, 0, 0);
-            agregar.Text = vista.UsaFechas ? "Registrar marcación" : "Agregar";
+            agregar.Text = vista.UsaFechas ? "Registrar marcación"
+                : modulos.SelectedItem.ToString() == "Plantillas" ? "Registrar rostro" : "Agregar";
             if (vista.EsDashboard)
             {
                 await CargarDashboardAsync();

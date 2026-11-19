@@ -48,7 +48,34 @@ namespace WindowsForms_Presentacion
                 {
                     plantilla.IdPlantilla, plantilla.Empleado, plantilla.TipoBiometria,
                     plantilla.FechaRegistro.ToString("dd/MM/yyyy")
-                });
+                }, RegistrarRostroAsync);
+        }
+
+        private async Task<bool> RegistrarRostroAsync()
+        {
+            var empleados = await consulta.ListarEmpleadosAsync();
+            var cuentas = await consulta.ListarUsuariosAsync();
+            if (IsDisposed || Disposing) return false;
+            var activos = new HashSet<int>(cuentas.Where(c => c.Estado?.Trim() == estadoActivo).Select(c => c.IdEmpleado));
+            var disponibles = empleados.Where(e => e.Estado?.Trim() == estadoActivo && activos.Contains(e.IdEmpleado)).ToList();
+            if (disponibles.Count == 0)
+                throw new InvalidOperationException("Registra primero un empleado activo con una cuenta activa en Usuarios.");
+            var empleado = ElegirEmpleado(disponibles);
+            int idSeleccionado;
+            using (var editor = new EditorRegistro("Registrar o reemplazar rostro", empleado))
+            {
+                if (editor.ShowDialog(this) != DialogResult.OK) return false;
+                idSeleccionado = empleado.ValorId;
+            }
+            var seleccionado = disponibles.Single(e => e.IdEmpleado == idSeleccionado);
+            using (var captura = new FrmCapturaFacial("Registrar rostro | " + NombreEmpleado(seleccionado), registrar: true))
+            {
+                if (captura.ShowDialog(this) != DialogResult.OK) return false;
+                estado.Text = "Guardando plantilla facial en Oracle…";
+                var servicio = new Logica.ServicioReconocimientoFacial(new Persistencia.RepositorioFacial(estadoActivo), estadoActivo);
+                await servicio.RegistrarAsync(sesion, seleccionado.IdEmpleado, captura.Caracteristicas);
+                return true;
+            }
         }
 
         private async Task FiltrarEmpleadoAsync()
