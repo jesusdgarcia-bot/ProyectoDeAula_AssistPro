@@ -9,6 +9,8 @@ namespace WindowsForms_Presentacion
     {
         private readonly bool requerido;
         private readonly bool secreto;
+        private string textoOriginal;
+        private DateTime? fechaOriginal;
 
         private CampoRegistro(string etiqueta, Control entrada, bool requerido = true, bool secreto = false)
         {
@@ -26,13 +28,22 @@ namespace WindowsForms_Presentacion
         {
             get
             {
+                if (!secreto && textoOriginal != null && Entrada.Text == textoOriginal)
+                    return textoOriginal.Length > 0 ? textoOriginal : null;
                 string texto = secreto ? Entrada.Text : Entrada.Text.Trim();
                 return texto.Length > 0 ? texto : null;
             }
         }
 
         internal int ValorId => ((OpcionRelacion)((ComboBox)Entrada).SelectedItem).Id;
-        internal DateTime ValorFecha => ((DateTimePicker)Entrada).Value.Date;
+        internal DateTime ValorFecha
+        {
+            get
+            {
+                DateTime fecha = ((DateTimePicker)Entrada).Value.Date;
+                return fechaOriginal.HasValue && fechaOriginal.Value.Date == fecha ? fechaOriginal.Value : fecha;
+            }
+        }
         internal DateTime? ValorFechaOpcional => ((DateTimePicker)Entrada).Checked ? ValorFecha : (DateTime?)null;
         internal TimeSpan ValorHora => ((DateTimePicker)Entrada).Value.TimeOfDay;
 
@@ -52,13 +63,13 @@ namespace WindowsForms_Presentacion
             return new CampoRegistro(etiqueta, new TextBox { MaxLength = maximo }, requerido);
         }
 
-        internal static CampoRegistro Clave(string etiqueta)
+        internal static CampoRegistro Clave(string etiqueta, bool requerido = true)
         {
             return new CampoRegistro(etiqueta, new TextBox
             {
                 MaxLength = 1024,
                 UseSystemPasswordChar = true
-            }, secreto: true);
+            }, requerido, secreto: true);
         }
 
         internal static CampoRegistro Fecha(string etiqueta, bool opcional = false)
@@ -100,6 +111,59 @@ namespace WindowsForms_Presentacion
             var lista = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             lista.Items.AddRange(opciones);
             return new CampoRegistro(etiqueta, lista);
+        }
+
+        internal CampoRegistro ConTexto(string texto)
+        {
+            textoOriginal = texto;
+            Entrada.Text = texto ?? string.Empty;
+            return this;
+        }
+
+        internal CampoRegistro ConFecha(DateTime? fecha)
+        {
+            fechaOriginal = fecha;
+            var selector = (DateTimePicker)Entrada;
+            if (!fecha.HasValue)
+            {
+                if (selector.ShowCheckBox) selector.Checked = false;
+                return this;
+            }
+            if (fecha.Value.Date < selector.MinDate.Date || fecha.Value.Date > selector.MaxDate.Date)
+                throw new InvalidOperationException($"La fecha guardada en «{Etiqueta}» está fuera del intervalo que admite el selector.");
+            selector.Value = fecha.Value.Date;
+            selector.Checked = true;
+            return this;
+        }
+
+        internal CampoRegistro ConHora(DateTime? hora)
+        {
+            if (hora.HasValue) ((DateTimePicker)Entrada).Value = DateTime.Today.Add(hora.Value.TimeOfDay);
+            return this;
+        }
+
+        internal CampoRegistro SeleccionarId(int? id)
+        {
+            if (!id.HasValue) return this;
+            var lista = (ComboBox)Entrada;
+            for (int indice = 0; indice < lista.Items.Count; indice++)
+            {
+                if (((OpcionRelacion)lista.Items[indice]).Id != id.Value) continue;
+                lista.SelectedIndex = indice;
+                return this;
+            }
+            throw new InvalidOperationException($"La referencia guardada en «{Etiqueta}» ya no está disponible. Actualiza la vista.");
+        }
+
+        internal CampoRegistro SeleccionarTexto(string texto)
+        {
+            if (texto == null) return this;
+            textoOriginal = texto;
+            var lista = (ComboBox)Entrada;
+            int indice = lista.Items.IndexOf(texto);
+            if (indice < 0) indice = lista.Items.Add(texto);
+            lista.SelectedIndex = indice;
+            return this;
         }
 
         private sealed class OpcionRelacion

@@ -15,6 +15,22 @@ namespace Persistencia
     public sealed class ConsultaAdministracion : IConsultaAdministracion
     {
         private const int LongitudMinimaClave = 8;
+        private static readonly Dictionary<Type, string> clavesAdministradas = new Dictionary<Type, string>
+        {
+            { typeof(Sede), nameof(Sede.IdSede) },
+            { typeof(Departamento), nameof(Departamento.IdDepartamento) },
+            { typeof(Cargo), nameof(Cargo.IdCargo) },
+            { typeof(Empleado), nameof(Empleado.IdEmpleado) },
+            { typeof(Rol), nameof(Rol.IdRol) },
+            { typeof(DispositivoBiometrico), nameof(DispositivoBiometrico.IdDispositivo) },
+            { typeof(Horario), nameof(Horario.IdHorario) },
+            { typeof(EmpleadoHorario), nameof(EmpleadoHorario.IdEmpleadoHorario) },
+            { typeof(TipoNovedad), nameof(TipoNovedad.IdTipoNovedad) },
+            { typeof(Novedad), nameof(Novedad.IdNovedad) },
+            { typeof(RegistroAsistencia), nameof(RegistroAsistencia.IdRegistro) },
+            { typeof(Usuario), nameof(Usuario.IdUsuario) },
+            { typeof(PlantillaBiometrica), nameof(PlantillaBiometrica.IdPlantilla) }
+        };
         private readonly string estadoActivo;
 
         public ConsultaAdministracion() : this("A")
@@ -96,9 +112,11 @@ namespace Persistencia
             return new OracleParameter(nombre, OracleDbType.Date) { Value = valor };
         }
 
-        public Task<List<RegistroAsistencia>> ConsultarAsistenciaAsync(DateTime desde, DateTime hasta, int? idEmpleado = null)
+        public Task<List<RegistroAsistencia>> ConsultarAsistenciaAsync(DateTime desde, DateTime hasta, int? idEmpleado = null,
+            string busqueda = null)
         {
-            return ConsultaAsistencia.ConsultarRegistrosAsync(desde, hasta, idEmpleado, incluirDetalle: true);
+            return ConsultaAsistencia.ConsultarRegistrosAsync(desde, hasta, idEmpleado, incluirDetalle: true,
+                busqueda: busqueda);
         }
 
         public async Task<List<Empleado>> ListarEmpleadosAsync()
@@ -122,7 +140,9 @@ namespace Persistencia
                     {
                         IdUsuario = u.IdUsuario,
                         IdEmpleado = u.IdEmpleado,
+                        IdRol = u.IdRol,
                         NombreUsuario = u.NombreUsuario,
+                        CorreoAcceso = u.CorreoAcceso,
                         Empleado = u.Empleado.Nombres + " " + u.Empleado.Apellidos,
                         Rol = u.Rol.NombreRol,
                         Estado = u.Estado
@@ -149,6 +169,7 @@ namespace Persistencia
             ListarAsync(c => c.PlantillasBiometricas.OrderByDescending(p => p.FechaRegistro).Select(p => new PlantillaAdministrada
             {
                 IdPlantilla = p.IdPlantilla,
+                IdEmpleado = p.IdEmpleado,
                 Empleado = p.Empleado.Nombres + " " + p.Empleado.Apellidos,
                 TipoBiometria = p.TipoBiometria,
                 FechaRegistro = p.FechaRegistro
@@ -157,12 +178,7 @@ namespace Persistencia
         public Task AgregarAsync<T>(SesionUsuario sesion, T registro) where T : class
         {
             if (registro == null) throw new ArgumentNullException(nameof(registro));
-            var tipo = typeof(T);
-            if (tipo != typeof(Sede) && tipo != typeof(Departamento) && tipo != typeof(Cargo) &&
-                tipo != typeof(Empleado) && tipo != typeof(Rol) && tipo != typeof(DispositivoBiometrico) &&
-                tipo != typeof(Horario) && tipo != typeof(EmpleadoHorario) && tipo != typeof(TipoNovedad) &&
-                tipo != typeof(Novedad) && tipo != typeof(RegistroAsistencia))
-                throw new ArgumentException("El tipo de registro no admite el alta en el panel.", nameof(registro));
+            ExigirTipoEditable<T>();
             return GuardarAsync(sesion, registro);
         }
 
@@ -176,6 +192,90 @@ namespace Persistencia
             await GuardarAsync(sesion, usuario).ConfigureAwait(false);
         }
 
+        public Task ActualizarAsync<T>(SesionUsuario sesion, T registro, T original) where T : class
+        {
+            if (registro == null) throw new ArgumentNullException(nameof(registro));
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            string clave = ExigirTipoEditable<T>();
+            var propiedadClave = typeof(T).GetProperty(clave);
+            int id = (int)propiedadClave.GetValue(registro);
+            if (id <= 0 || id != (int)propiedadClave.GetValue(original))
+                throw new ArgumentException("El identificador del registro no se puede modificar.", nameof(registro));
+
+            return EjecutarCambioAsync(sesion, async contexto =>
+            {
+                var existente = await contexto.Set<T>().FindAsync(id).ConfigureAwait(false);
+                if (existente == null)
+                    throw new InvalidOperationException("El registro ya no existe. Actualiza la vista antes de continuar.");
+                var actuales = contexto.Entry(existente).CurrentValues;
+                var anteriores = actuales.Clone();
+                anteriores.SetValues(original);
+                foreach (string propiedad in actuales.PropertyNames)
+                {
+                    if (!Equals(actuales[propiedad], anteriores[propiedad]))
+                        throw new InvalidOperationException("Otro proceso modificó el registro. Actualiza la vista y vuelve a editarlo.");
+                }
+                actuales.SetValues(registro);
+            });
+        }
+
+        public async Task ActualizarUsuarioAsync(SesionUsuario sesion, Usuario usuario, CuentaAdministrada original,
+            string nuevaClave = null)
+        {
+            if (usuario == null) throw new ArgumentNullException(nameof(usuario));
+            if (original == null) throw new ArgumentNullException(nameof(original));
+            ExigirSesionAdministrativa(sesion);
+            if (usuario.IdUsuario <= 0 || usuario.IdUsuario != original.IdUsuario)
+                throw new ArgumentException("El identificador del usuario no se puede modificar.", nameof(usuario));
+            string nuevoHash = null;
+            if (!string.IsNullOrEmpty(nuevaClave))
+            {
+                if (nuevaClave.Length < LongitudMinimaClave || nuevaClave.Length > 1024)
+                    throw new ArgumentException($"La contraseña debe tener entre {LongitudMinimaClave} y 1024 caracteres.");
+                nuevoHash = await Task.Run(() => new ClavesPbkdf2().CrearHash(nuevaClave)).ConfigureAwait(false);
+            }
+
+            await EjecutarCambioAsync(sesion, async contexto =>
+            {
+                var existente = await contexto.Usuarios.FindAsync(usuario.IdUsuario).ConfigureAwait(false);
+                if (existente == null)
+                    throw new InvalidOperationException("El usuario ya no existe. Actualiza la vista antes de continuar.");
+                if (existente.IdEmpleado != original.IdEmpleado || existente.IdRol != original.IdRol ||
+                    existente.NombreUsuario != original.NombreUsuario || existente.CorreoAcceso != original.CorreoAcceso ||
+                    existente.Estado != original.Estado)
+                    throw new InvalidOperationException("Otro proceso modificó el usuario. Actualiza la vista y vuelve a editarlo.");
+
+                existente.IdEmpleado = usuario.IdEmpleado;
+                existente.IdRol = usuario.IdRol;
+                existente.NombreUsuario = usuario.NombreUsuario;
+                existente.CorreoAcceso = usuario.CorreoAcceso;
+                existente.Estado = usuario.Estado;
+                if (nuevoHash != null) existente.ContrasenaHash = nuevoHash;
+            }).ConfigureAwait(false);
+        }
+
+        public Task EliminarAsync<T>(SesionUsuario sesion, int id) where T : class
+        {
+            ExigirTipoEditable<T>(incluirUsuariosYPlantillas: true);
+            if (id <= 0) throw new ArgumentException("Selecciona un registro válido para eliminar.", nameof(id));
+            return EjecutarCambioAsync(sesion, async contexto =>
+            {
+                var existente = await contexto.Set<T>().FindAsync(id).ConfigureAwait(false);
+                if (existente == null)
+                    throw new InvalidOperationException("El registro ya no existe. Actualiza la vista antes de continuar.");
+                contexto.Set<T>().Remove(existente);
+            });
+        }
+
+        private static string ExigirTipoEditable<T>(bool incluirUsuariosYPlantillas = false) where T : class
+        {
+            string clave;
+            if (!clavesAdministradas.TryGetValue(typeof(T), out clave) ||
+                (!incluirUsuariosYPlantillas && (typeof(T) == typeof(Usuario) || typeof(T) == typeof(PlantillaBiometrica))))
+                throw new ArgumentException("El tipo de registro no admite esta operación en el panel.");
+            return clave;
+        }
+
         private static async Task<List<T>> ListarAsync<T>(Func<AssistProContext, IQueryable<T>> consulta) where T : class
         {
             using (var contexto = new AssistProContext())
@@ -186,19 +286,32 @@ namespace Persistencia
             }
         }
 
-        private async Task GuardarAsync<T>(SesionUsuario sesion, T registro) where T : class
+        private Task GuardarAsync<T>(SesionUsuario sesion, T registro) where T : class
+        {
+            return EjecutarCambioAsync(sesion, contexto =>
+            {
+                contexto.Set<T>().Add(registro);
+                if (contexto.ChangeTracker.Entries().Count() != 1)
+                    throw new ArgumentException("Selecciona las referencias existentes antes de guardar.");
+                return Task.CompletedTask;
+            });
+        }
+
+        private async Task EjecutarCambioAsync(SesionUsuario sesion, Func<AssistProContext, Task> cambiar)
         {
             ExigirSesionAdministrativa(sesion);
             using (var contexto = new AssistProContext())
             {
-                await ValidarAccesoAdministrativoAsync(contexto, sesion).ConfigureAwait(false);
-
-                contexto.Set<T>().Add(registro);
-                if (contexto.ChangeTracker.Entries().Count() != 1)
-                    throw new ArgumentException("Selecciona las referencias existentes antes de guardar.");
                 try
                 {
-                    await contexto.SaveChangesAsync().ConfigureAwait(false);
+                    await contexto.Database.Connection.OpenAsync().ConfigureAwait(false);
+                    using (var transaccion = contexto.Database.BeginTransaction(IsolationLevel.Serializable))
+                    {
+                        await ValidarAccesoAdministrativoAsync(contexto, sesion).ConfigureAwait(false);
+                        await cambiar(contexto).ConfigureAwait(false);
+                        await contexto.SaveChangesAsync().ConfigureAwait(false);
+                        transaccion.Commit();
+                    }
                 }
                 catch (DbEntityValidationException ex)
                 {
@@ -206,17 +319,34 @@ namespace Persistencia
                         .Select(e => e.ErrorMessage).FirstOrDefault();
                     throw new InvalidOperationException(mensaje ?? "Revisa los campos del registro.", ex);
                 }
-                catch (DbUpdateException ex) when (ex.GetBaseException() is OracleException)
+                catch (DbUpdateConcurrencyException ex)
                 {
-                    var error = (OracleException)ex.GetBaseException();
-                    if (error.Number == 1)
-                        throw new InvalidOperationException("Ya existe un registro con esos datos únicos.", ex);
-                    if (error.Number == 2291)
-                        throw new InvalidOperationException("Una de las referencias seleccionadas ya no existe. Abre el formulario de nuevo.", ex);
-                    if (error.Number == 12899)
-                        throw new InvalidOperationException("Uno de los campos supera el tamaño permitido por Oracle.", ex);
-                    throw;
+                    throw new InvalidOperationException("Otro proceso modificó o eliminó el registro. Actualiza la vista y vuelve a intentarlo.", ex);
                 }
+                catch (Exception ex) when (ex.GetBaseException() is OracleException errorOracle &&
+                    MensajeErrorOracle(errorOracle.Number) != null)
+                {
+                    throw new InvalidOperationException(MensajeErrorOracle(errorOracle.Number), ex);
+                }
+            }
+        }
+
+        private static string MensajeErrorOracle(int numero)
+        {
+            switch (numero)
+            {
+                case 1:
+                    return "Ya existe un registro con esos datos únicos.";
+                case 2291:
+                    return "Una de las referencias seleccionadas ya no existe. Abre el formulario de nuevo.";
+                case 2292:
+                    return "El registro tiene datos relacionados y no se puede eliminar. Revisa sus referencias antes de continuar.";
+                case 12899:
+                    return "Uno de los campos supera el tamaño permitido por Oracle.";
+                case 8177:
+                    return "Otro proceso modificó los datos. Actualiza la vista y vuelve a intentarlo.";
+                default:
+                    return null;
             }
         }
 

@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Entidades;
 using Logica;
+using Persistencia;
 
 namespace Pruebas
 {
-    // Runner sin Oracle, cámara ni dependencias adicionales. Un fallo devuelve código 1.
+    // Runner sin conexión a Oracle ni cámara. Un fallo devuelve código 1.
     internal static class Program
     {
         private static int ejecutadas;
@@ -16,7 +17,7 @@ namespace Pruebas
             try
             {
                 EjecutarAsync().GetAwaiter().GetResult();
-                Console.WriteLine("Correctas: " + ejecutadas + " pruebas de reconocimiento facial.");
+                Console.WriteLine("Correctas: " + ejecutadas + " pruebas.");
                 return 0;
             }
             catch (Exception error)
@@ -177,6 +178,67 @@ namespace Pruebas
                     new SesionUsuario(UsuarioActivo(1)), 101, Vector(0)));
                 Verificar(repo.Guardados == 0, "No debe escribir una plantilla sin permiso administrativo.");
             });
+
+            await Probar("Las modificaciones administrativas requieren una sesión de administrador", async () =>
+            {
+                var consulta = new ConsultaAdministracion();
+                var empleado = new SesionUsuario(UsuarioActivo(1));
+                await EsperarAsync<UnauthorizedAccessException>(() => consulta.ActualizarAsync(empleado,
+                    new Sede { IdSede = 1, NombreSede = "Actualizada" }, new Sede { IdSede = 1 }));
+                await EsperarAsync<UnauthorizedAccessException>(() => consulta.EliminarAsync<Sede>(empleado, 1));
+                await EsperarAsync<UnauthorizedAccessException>(() => consulta.ActualizarUsuarioAsync(empleado,
+                    new Usuario { IdUsuario = 1 }, new CuentaAdministrada { IdUsuario = 1 }));
+            });
+            await Probar("Una edición conserva la identidad del registro original", async () =>
+            {
+                var consulta = new ConsultaAdministracion();
+                var admin = SesionAdministrativa();
+                await EsperarAsync<ArgumentException>(() => consulta.ActualizarAsync(admin,
+                    new Sede { IdSede = 2 }, new Sede { IdSede = 1 }));
+                await EsperarAsync<ArgumentException>(() => consulta.ActualizarUsuarioAsync(admin,
+                    new Usuario { IdUsuario = 2 }, new CuentaAdministrada { IdUsuario = 1 }));
+            });
+            await Probar("Usuarios y biometría utilizan sus operaciones específicas de actualización", async () =>
+            {
+                var consulta = new ConsultaAdministracion();
+                var admin = SesionAdministrativa();
+                await EsperarAsync<ArgumentException>(() => consulta.ActualizarAsync(admin,
+                    new Usuario { IdUsuario = 1 }, new Usuario { IdUsuario = 1 }));
+                await EsperarAsync<ArgumentException>(() => consulta.ActualizarAsync(admin,
+                    new PlantillaBiometrica { IdPlantilla = 1 }, new PlantillaBiometrica { IdPlantilla = 1 }));
+                await EsperarAsync<ArgumentException>(() => consulta.EliminarAsync<CuentaAdministrada>(admin, 1));
+            });
+            await Probar("La nueva contraseña se valida antes de acceder al almacenamiento", async () =>
+            {
+                var consulta = new ConsultaAdministracion();
+                var admin = SesionAdministrativa();
+                var usuario = new Usuario { IdUsuario = 1 };
+                var original = new CuentaAdministrada { IdUsuario = 1 };
+                await EsperarAsync<ArgumentException>(() => consulta.ActualizarUsuarioAsync(admin,
+                    usuario, original, "corta"));
+                await EsperarAsync<ArgumentException>(() => consulta.ActualizarUsuarioAsync(admin,
+                    usuario, original, new string('x', 1025)));
+            });
+            await Probar("Editar y eliminar requieren registros e identificadores válidos", async () =>
+            {
+                var consulta = new ConsultaAdministracion();
+                var admin = SesionAdministrativa();
+                await EsperarAsync<ArgumentNullException>(() => consulta.ActualizarAsync<Sede>(admin,
+                    null, new Sede { IdSede = 1 }));
+                await EsperarAsync<ArgumentNullException>(() => consulta.ActualizarAsync(admin,
+                    new Sede { IdSede = 1 }, (Sede)null));
+                await EsperarAsync<ArgumentException>(() => consulta.ActualizarAsync(admin,
+                    new Sede(), new Sede()));
+                await EsperarAsync<ArgumentException>(() => consulta.EliminarAsync<Sede>(admin, 0));
+                await EsperarAsync<ArgumentException>(() => consulta.EliminarAsync<Sede>(admin, -1));
+            });
+        }
+
+        private static SesionUsuario SesionAdministrativa()
+        {
+            var usuario = UsuarioActivo(9);
+            usuario.Rol.NombreRol = "Administrador";
+            return new SesionUsuario(usuario);
         }
 
         private static ServicioReconocimientoFacial Servicio(RepositorioFalso repositorio) =>

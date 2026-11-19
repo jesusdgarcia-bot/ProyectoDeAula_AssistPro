@@ -28,7 +28,7 @@ namespace WindowsForms_Presentacion
         private Control CrearFiltrosDashboard()
         {
             var hoy = DateTime.Today;
-            filtrosDashboard.AutoSize = true;
+            filtrosDashboard.Size = new Size(288, 52);
             filtrosDashboard.WrapContents = false;
             filtrosDashboard.Visible = false;
             filtrosDashboard.Margin = Padding.Empty;

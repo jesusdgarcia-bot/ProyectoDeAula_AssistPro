@@ -555,6 +555,10 @@ namespace WindowsForms_Presentacion
                 p.EndCap = LineCap.Round;
                 switch (nombre)
                 {
+                    case "buscar":
+                        g.DrawEllipse(p, 4, 4, 16, 16);
+                        g.DrawLine(p, 18, 18, 28, 28);
+                        break;
                     case "usuario":
                         g.DrawEllipse(p, 11, 2, 10, 10);
                         g.DrawArc(p, 4, 18, 24, 22, 180, 180);

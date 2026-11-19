@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Entidades;
+using Logica;
 
 namespace WindowsForms_Presentacion
 {
@@ -12,47 +13,56 @@ namespace WindowsForms_Presentacion
         private void ConfigurarOperaciones()
         {
             AgregarVista("Asistencia", new[] { "ID", "Empleado", "Fecha", "Hora", "Marcación", "Dispositivo", "Verificación" },
-                () => consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado),
+                () => consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado, textoBuscado),
                 registro => new object[]
                 {
                     registro.IdRegistro, NombreEmpleado(registro.Empleado), registro.Fecha.ToString("dd/MM/yyyy"),
                     registro.Hora.ToString("HH:mm:ss"), registro.TipoMarcacion, registro.Dispositivo?.NombreDispositivo,
                     registro.MetodoVerificacion
-                }, RegistrarMarcacionAsync, usaFechas: true);
+                }, () => RegistrarMarcacionAsync(), usaFechas: true, editar: RegistrarMarcacionAsync,
+                eliminar: registro => consulta.EliminarAsync<RegistroAsistencia>(sesion, registro.IdRegistro));
             AgregarVista("Empleados", new[] { "ID", "Nombre", "Documento", "Departamento", "Cargo", "Estado" },
                 consulta.ListarEmpleadosAsync, empleado => new object[]
                 {
                     empleado.IdEmpleado, NombreEmpleado(empleado), empleado.NumeroDocumento,
                     empleado.Departamento?.NombreDepartamento, empleado.Cargo?.NombreCargo, empleado.Estado
-                }, AgregarEmpleadoAsync);
+                }, () => AgregarEmpleadoAsync(), editar: AgregarEmpleadoAsync,
+                eliminar: empleado => consulta.EliminarAsync<Empleado>(sesion, empleado.IdEmpleado));
             AgregarVista("Usuarios", new[] { "ID", "Usuario", "Empleado", "Rol", "Estado" },
                 consulta.ListarUsuariosAsync, cuenta => new object[]
                 {
                     cuenta.IdUsuario, cuenta.NombreUsuario, cuenta.Empleado, cuenta.Rol, cuenta.Estado
-                }, AgregarUsuarioAsync);
+                }, () => AgregarUsuarioAsync(), editar: AgregarUsuarioAsync,
+                eliminar: cuenta => consulta.EliminarAsync<Usuario>(sesion, cuenta.IdUsuario));
             AgregarVista("Asignaciones", new[] { "Empleado", "Horario", "Desde", "Hasta" },
                 consulta.ListarAsignacionesAsync, asignacion => new object[]
                 {
                     NombreEmpleado(asignacion.Empleado), asignacion.Horario?.NombreHorario,
                     asignacion.FechaInicio.ToString("dd/MM/yyyy"), asignacion.FechaFin?.ToString("dd/MM/yyyy")
-                }, AsignarHorarioAsync);
+                }, () => AsignarHorarioAsync(), editar: AsignarHorarioAsync,
+                eliminar: asignacion => consulta.EliminarAsync<EmpleadoHorario>(sesion, asignacion.IdEmpleadoHorario));
             AgregarVista("Novedades", new[] { "Empleado", "Tipo", "Desde", "Hasta", "Estado", "Motivo" },
                 consulta.ListarNovedadesAsync, novedad => new object[]
                 {
                     NombreEmpleado(novedad.Empleado), novedad.TipoNovedad?.NombreTipo,
                     novedad.FechaInicio.ToString("dd/MM/yyyy"), novedad.FechaFin?.ToString("dd/MM/yyyy"),
                     novedad.EstadoAprobacion, novedad.Motivo
-                }, AgregarNovedadAsync);
+                }, () => AgregarNovedadAsync(), editar: AgregarNovedadAsync,
+                eliminar: novedad => consulta.EliminarAsync<Novedad>(sesion, novedad.IdNovedad));
             AgregarVista("Plantillas", new[] { "ID", "Empleado", "Biometría", "Fecha de registro" },
                 consulta.ListarPlantillasAsync, plantilla => new object[]
                 {
                     plantilla.IdPlantilla, plantilla.Empleado, plantilla.TipoBiometria,
                     plantilla.FechaRegistro.ToString("dd/MM/yyyy")
-                }, RegistrarRostroAsync);
+                }, () => RegistrarRostroAsync(), editar: RegistrarRostroAsync,
+                eliminar: plantilla => consulta.EliminarAsync<PlantillaBiometrica>(sesion, plantilla.IdPlantilla));
         }
 
-        private async Task<bool> RegistrarRostroAsync()
+        private async Task<bool> RegistrarRostroAsync(PlantillaAdministrada original = null)
         {
+            if (original != null && !string.Equals(original.TipoBiometria?.Trim(), PlantillaFacial.TipoBiometria,
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("La captura de cámara permite actualizar las plantillas faciales. Selecciona una plantilla de rostro.");
             var empleados = await consulta.ListarEmpleadosAsync();
             var cuentas = await consulta.ListarUsuariosAsync();
             if (IsDisposed || Disposing) return false;
@@ -60,14 +70,19 @@ namespace WindowsForms_Presentacion
             var disponibles = empleados.Where(e => e.Estado?.Trim() == estadoActivo && activos.Contains(e.IdEmpleado)).ToList();
             if (disponibles.Count == 0)
                 throw new InvalidOperationException("Registra primero un empleado activo con una cuenta activa en Usuarios.");
-            var empleado = ElegirEmpleado(disponibles);
-            int idSeleccionado;
-            using (var editor = new EditorRegistro("Registrar o reemplazar rostro", empleado))
+            int idSeleccionado = original?.IdEmpleado ?? 0;
+            if (original == null)
             {
-                if (editor.ShowDialog(this) != DialogResult.OK) return false;
-                idSeleccionado = empleado.ValorId;
+                var empleado = ElegirEmpleado(disponibles);
+                using (var editor = new EditorRegistro("Registrar o reemplazar rostro", empleado))
+                {
+                    if (editor.ShowDialog(this) != DialogResult.OK) return false;
+                    idSeleccionado = empleado.ValorId;
+                }
             }
-            var seleccionado = disponibles.Single(e => e.IdEmpleado == idSeleccionado);
+            var seleccionado = disponibles.SingleOrDefault(e => e.IdEmpleado == idSeleccionado);
+            if (seleccionado == null)
+                throw new InvalidOperationException("El empleado de la plantilla debe tener una cuenta activa y estar activo para actualizar su rostro.");
             using (var captura = new FrmCapturaFacial("Registrar rostro | " + NombreEmpleado(seleccionado), registrar: true))
             {
                 if (captura.ShowDialog(this) != DialogResult.OK) return false;
@@ -110,28 +125,32 @@ namespace WindowsForms_Presentacion
             if (seleccionado && !IsDisposed && !Disposing) await CargarVistaAsync();
         }
 
-        private async Task<bool> RegistrarMarcacionAsync()
+        private async Task<bool> RegistrarMarcacionAsync(RegistroAsistencia original = null)
         {
-            var empleado = ElegirEmpleado(await consulta.ListarEmpleadosAsync());
+            var empleado = ElegirEmpleado(await consulta.ListarEmpleadosAsync()).SeleccionarId(original?.IdEmpleado);
             var dispositivo = ElegirReferencia("Dispositivo", await consulta.ListarDispositivosAsync(),
-                d => d.NombreDispositivo + " · " + d.Sede?.NombreSede, d => d.IdDispositivo, "Dispositivos");
-            var fecha = CampoRegistro.Fecha("Fecha");
-            var hora = CampoRegistro.Hora("Hora");
-            var tipo = CampoRegistro.Opciones("Tipo de marcación", "Entrada", "Salida");
+                d => d.NombreDispositivo + " · " + d.Sede?.NombreSede, d => d.IdDispositivo, "Dispositivos")
+                .SeleccionarId(original?.IdDispositivo);
+            var fecha = CampoRegistro.Fecha("Fecha").ConFecha(original?.Fecha);
+            var hora = CampoRegistro.Hora("Hora").ConHora(original?.Hora);
+            var tipo = CampoRegistro.Opciones("Tipo de marcación", "Entrada", "Salida").SeleccionarTexto(original?.TipoMarcacion);
             DateTime dia = DateTime.Today;
             int idEmpleado = 0;
-            bool guardado = await GuardarAltaAsync("Registrar marcación", () =>
+            bool guardado = await GuardarRegistroAsync(original == null ? "Registrar marcación" : "Actualizar marcación", original, () =>
             {
-                dia = fecha.ValorFecha;
+                dia = fecha.ValorFecha.Date;
                 idEmpleado = empleado.ValorId;
+                DateTime horaRegistro = original != null && original.Fecha.Date == dia && original.Hora.TimeOfDay == hora.ValorHora
+                    ? original.Hora : dia.Add(hora.ValorHora);
                 return new RegistroAsistencia
                 {
+                    IdRegistro = original?.IdRegistro ?? 0,
                     IdEmpleado = idEmpleado,
                     IdDispositivo = dispositivo.ValorId,
-                    Fecha = dia,
-                    Hora = dia.Add(hora.ValorHora),
+                    Fecha = fecha.ValorFecha,
+                    Hora = horaRegistro,
                     TipoMarcacion = tipo.ValorTexto,
-                    MetodoVerificacion = "Manual"
+                    MetodoVerificacion = original?.MetodoVerificacion ?? "Manual"
                 };
             }, empleado, dispositivo, fecha, hora, tipo);
             if (guardado && !IsDisposed && !Disposing)
@@ -143,27 +162,33 @@ namespace WindowsForms_Presentacion
             return guardado;
         }
 
-        private async Task<bool> AgregarEmpleadoAsync()
+        private async Task<bool> AgregarEmpleadoAsync(Empleado original = null)
         {
             var departamento = ElegirReferencia("Departamento", await consulta.ListarDepartamentosAsync(),
-                d => d.NombreDepartamento + " · " + d.Sede?.NombreSede, d => d.IdDepartamento, "Departamentos");
+                d => d.NombreDepartamento + " · " + d.Sede?.NombreSede, d => d.IdDepartamento, "Departamentos")
+                .SeleccionarId(original?.IdDepartamento);
             var cargo = ElegirReferencia("Cargo", await consulta.ListarCargosAsync(),
-                c => c.NombreCargo, c => c.IdCargo, "Cargos");
-            var tipo = CampoRegistro.Texto("Tipo de documento", 2);
-            var documento = CampoRegistro.Texto("Número de documento", 20);
-            var nombres = CampoRegistro.Texto("Nombres", 60);
-            var apellidos = CampoRegistro.Texto("Apellidos", 60);
-            var correo = CampoRegistro.Texto("Correo", 100, requerido: false);
-            var telefono = CampoRegistro.Texto("Teléfono", 20, requerido: false);
-            var nacimiento = CampoRegistro.Fecha("Fecha de nacimiento", opcional: true);
-            var ingreso = CampoRegistro.Fecha("Fecha de ingreso");
-            return await GuardarAltaAsync("Agregar empleado", () =>
+                c => c.NombreCargo, c => c.IdCargo, "Cargos").SeleccionarId(original?.IdCargo);
+            var tipo = CampoRegistro.Texto("Tipo de documento", 2).ConTexto(original?.TipoDocumento);
+            var documento = CampoRegistro.Texto("Número de documento", 20).ConTexto(original?.NumeroDocumento);
+            var nombres = CampoRegistro.Texto("Nombres", 60).ConTexto(original?.Nombres);
+            var apellidos = CampoRegistro.Texto("Apellidos", 60).ConTexto(original?.Apellidos);
+            var correo = CampoRegistro.Texto("Correo", 100, requerido: false).ConTexto(original?.Correo);
+            var telefono = CampoRegistro.Texto("Teléfono", 20, requerido: false).ConTexto(original?.Telefono);
+            var nacimiento = CampoRegistro.Fecha("Fecha de nacimiento", opcional: true).ConFecha(original?.FechaNacimiento);
+            var ingreso = CampoRegistro.Fecha("Fecha de ingreso").ConFecha(original?.FechaIngreso);
+            var estadoEmpleado = original == null ? null : CampoEstado(original.Estado);
+            var campos = new List<CampoRegistro> { tipo, documento, nombres, apellidos, correo, telefono, nacimiento, ingreso, departamento, cargo };
+            if (estadoEmpleado != null) campos.Add(estadoEmpleado);
+            return await GuardarRegistroAsync(original == null ? "Agregar empleado" : "Actualizar empleado", original, () =>
             {
-                if (nacimiento.ValorFechaOpcional > ingreso.ValorFecha)
+                if (nacimiento.ValorFechaOpcional?.Date > ingreso.ValorFecha.Date)
                     throw new ArgumentException("El nacimiento debe ser anterior o igual al ingreso.");
                 return new Empleado
                 {
-                    TipoDocumento = tipo.ValorTexto.ToUpperInvariant(),
+                    IdEmpleado = original?.IdEmpleado ?? 0,
+                    TipoDocumento = original != null && tipo.ValorTexto == original.TipoDocumento
+                        ? original.TipoDocumento : tipo.ValorTexto.ToUpperInvariant(),
                     NumeroDocumento = documento.ValorTexto,
                     Nombres = nombres.ValorTexto,
                     Apellidos = apellidos.ValorTexto,
@@ -171,72 +196,95 @@ namespace WindowsForms_Presentacion
                     Telefono = telefono.ValorTexto,
                     FechaNacimiento = nacimiento.ValorFechaOpcional,
                     FechaIngreso = ingreso.ValorFecha,
-                    Estado = estadoActivo,
+                    Estado = estadoEmpleado?.ValorTexto ?? estadoActivo,
                     IdDepartamento = departamento.ValorId,
                     IdCargo = cargo.ValorId
                 };
-            }, tipo, documento, nombres, apellidos, correo, telefono, nacimiento, ingreso, departamento, cargo);
+            }, campos.ToArray());
         }
 
-        private async Task<bool> AgregarUsuarioAsync()
+        private async Task<bool> AgregarUsuarioAsync(CuentaAdministrada original = null)
         {
             var empleados = await consulta.ListarEmpleadosAsync();
             var cuentas = await consulta.ListarUsuariosAsync();
-            var ocupados = new HashSet<int>(cuentas.Select(c => c.IdEmpleado));
-            var disponibles = empleados.Where(e => e.Estado?.Trim() == estadoActivo && !ocupados.Contains(e.IdEmpleado)).ToList();
+            var ocupados = new HashSet<int>(cuentas.Where(c => c.IdUsuario != original?.IdUsuario).Select(c => c.IdEmpleado));
+            var disponibles = empleados.Where(e => (e.Estado?.Trim() == estadoActivo || e.IdEmpleado == original?.IdEmpleado)
+                && !ocupados.Contains(e.IdEmpleado)).ToList();
             if (disponibles.Count == 0)
                 throw new InvalidOperationException("Registra un empleado activo que todavía no tenga cuenta.");
-            var empleado = ElegirEmpleado(disponibles);
-            var rol = ElegirReferencia("Rol", await consulta.ListarRolesAsync(), r => r.NombreRol, r => r.IdRol, "Roles");
-            var usuario = CampoRegistro.Texto("Nombre de usuario", 30);
-            var correo = CampoRegistro.Texto("Correo de acceso", 100);
-            var clave = CampoRegistro.Clave("Contraseña");
-            return await AbrirAltaAsync("Agregar usuario", () => consulta.CrearUsuarioAsync(sesion, new Usuario
+            var empleado = ElegirEmpleado(disponibles).SeleccionarId(original?.IdEmpleado);
+            var rol = ElegirReferencia("Rol", await consulta.ListarRolesAsync(), r => r.NombreRol, r => r.IdRol, "Roles")
+                .SeleccionarId(original?.IdRol);
+            var usuario = CampoRegistro.Texto("Nombre de usuario", 30).ConTexto(original?.NombreUsuario);
+            var correo = CampoRegistro.Texto("Correo de acceso", 100).ConTexto(original?.CorreoAcceso);
+            var clave = CampoRegistro.Clave(original == null ? "Contraseña" : "Nueva contraseña (opcional)", requerido: original == null);
+            var estadoUsuario = original == null ? null : CampoEstado(original.Estado);
+            var campos = new List<CampoRegistro> { empleado, rol, usuario, correo, clave };
+            if (estadoUsuario != null) campos.Add(estadoUsuario);
+            return await AbrirRegistroAsync(original == null ? "Agregar usuario" : "Actualizar usuario", () =>
             {
-                IdEmpleado = empleado.ValorId,
-                IdRol = rol.ValorId,
-                NombreUsuario = usuario.ValorTexto,
-                CorreoAcceso = correo.ValorTexto,
-                Estado = estadoActivo
-            }, clave.ValorTexto), empleado, rol, usuario, correo, clave);
+                var registro = new Usuario
+                {
+                    IdUsuario = original?.IdUsuario ?? 0,
+                    IdEmpleado = empleado.ValorId,
+                    IdRol = rol.ValorId,
+                    NombreUsuario = usuario.ValorTexto,
+                    CorreoAcceso = correo.ValorTexto,
+                    Estado = estadoUsuario?.ValorTexto ?? estadoActivo
+                };
+                return original == null ? consulta.CrearUsuarioAsync(sesion, registro, clave.ValorTexto)
+                    : consulta.ActualizarUsuarioAsync(sesion, registro, original, clave.ValorTexto);
+            }, campos.ToArray());
         }
 
-        private async Task<bool> AsignarHorarioAsync()
+        private async Task<bool> AsignarHorarioAsync(EmpleadoHorario original = null)
         {
-            var empleado = ElegirEmpleado(await consulta.ListarEmpleadosAsync());
+            var empleado = ElegirEmpleado(await consulta.ListarEmpleadosAsync()).SeleccionarId(original?.IdEmpleado);
             var horario = ElegirReferencia("Horario", await consulta.ListarHorariosAsync(),
-                h => h.NombreHorario, h => h.IdHorario, "Horarios");
-            var inicio = CampoRegistro.Fecha("Desde");
-            var fin = CampoRegistro.Fecha("Hasta", opcional: true);
-            return await GuardarAltaAsync("Asignar horario", () =>
+                h => h.NombreHorario, h => h.IdHorario, "Horarios").SeleccionarId(original?.IdHorario);
+            var inicio = CampoRegistro.Fecha("Desde").ConFecha(original?.FechaInicio);
+            var fin = CampoRegistro.Fecha("Hasta", opcional: true).ConFecha(original?.FechaFin);
+            return await GuardarRegistroAsync(original == null ? "Asignar horario" : "Actualizar asignación", original, () =>
             {
                 ValidarPeriodo(inicio.ValorFecha, fin.ValorFechaOpcional);
                 return new EmpleadoHorario
                 {
+                    IdEmpleadoHorario = original?.IdEmpleadoHorario ?? 0,
                     IdEmpleado = empleado.ValorId, IdHorario = horario.ValorId,
                     FechaInicio = inicio.ValorFecha, FechaFin = fin.ValorFechaOpcional
                 };
             }, empleado, horario, inicio, fin);
         }
 
-        private async Task<bool> AgregarNovedadAsync()
+        private async Task<bool> AgregarNovedadAsync(Novedad original = null)
         {
-            var empleado = ElegirEmpleado(await consulta.ListarEmpleadosAsync());
+            var empleado = ElegirEmpleado(await consulta.ListarEmpleadosAsync()).SeleccionarId(original?.IdEmpleado);
             var tipo = ElegirReferencia("Tipo de novedad", await consulta.ListarTiposNovedadAsync(),
-                t => t.NombreTipo, t => t.IdTipoNovedad, "Tipos de novedad");
-            var inicio = CampoRegistro.Fecha("Desde");
-            var fin = CampoRegistro.Fecha("Hasta", opcional: true);
-            var motivo = CampoRegistro.Texto("Motivo", 200, requerido: false);
-            return await GuardarAltaAsync("Agregar novedad", () =>
+                t => t.NombreTipo, t => t.IdTipoNovedad, "Tipos de novedad").SeleccionarId(original?.IdTipoNovedad);
+            var inicio = CampoRegistro.Fecha("Desde").ConFecha(original?.FechaInicio);
+            var fin = CampoRegistro.Fecha("Hasta", opcional: true).ConFecha(original?.FechaFin);
+            var motivo = CampoRegistro.Texto("Motivo", 200, requerido: false).ConTexto(original?.Motivo);
+            var aprobacion = original == null ? null : CampoRegistro.Opciones("Estado de aprobación", "Pendiente", "Aprobado", "Rechazado")
+                .SeleccionarTexto(original.EstadoAprobacion);
+            var campos = new List<CampoRegistro> { empleado, tipo, inicio, fin, motivo };
+            if (aprobacion != null) campos.Add(aprobacion);
+            return await GuardarRegistroAsync(original == null ? "Agregar novedad" : "Actualizar novedad", original, () =>
             {
                 ValidarPeriodo(inicio.ValorFecha, fin.ValorFechaOpcional);
+                string estadoAprobacion = aprobacion?.ValorTexto ?? "Pendiente";
+                int? idUsuarioAprueba = original?.IdUsuarioAprueba;
+                if (!string.Equals(estadoAprobacion, original?.EstadoAprobacion, StringComparison.Ordinal))
+                    idUsuarioAprueba = string.Equals(estadoAprobacion, "Pendiente", StringComparison.OrdinalIgnoreCase)
+                        ? (int?)null : sesion.IdUsuario;
                 return new Novedad
                 {
+                    IdNovedad = original?.IdNovedad ?? 0,
                     IdEmpleado = empleado.ValorId, IdTipoNovedad = tipo.ValorId,
                     FechaInicio = inicio.ValorFecha, FechaFin = fin.ValorFechaOpcional,
-                    Motivo = motivo.ValorTexto, EstadoAprobacion = "Pendiente"
+                    Motivo = motivo.ValorTexto, EstadoAprobacion = estadoAprobacion,
+                    IdUsuarioAprueba = idUsuarioAprueba
                 };
-            }, empleado, tipo, inicio, fin, motivo);
+            }, campos.ToArray());
         }
 
         private static CampoRegistro ElegirEmpleado(List<Empleado> filas)
@@ -255,16 +303,24 @@ namespace WindowsForms_Presentacion
 
         private static void ValidarPeriodo(DateTime inicio, DateTime? fin)
         {
-            if (fin < inicio)
+            if (fin?.Date < inicio.Date)
                 throw new ArgumentException("La fecha final debe ser igual o posterior a la fecha inicial.");
         }
 
-        private Task<bool> GuardarAltaAsync<T>(string titulo, Func<T> crear, params CampoRegistro[] campos) where T : class
+        private CampoRegistro CampoEstado(string actual)
         {
-            return AbrirAltaAsync(titulo, () => consulta.AgregarAsync(sesion, crear()), campos);
+            string estadoInactivo = estadoActivo == "I" ? "A" : "I";
+            return CampoRegistro.Opciones("Estado", estadoActivo, estadoInactivo).SeleccionarTexto(actual);
         }
 
-        private async Task<bool> AbrirAltaAsync(string titulo, Func<Task> guardar, params CampoRegistro[] campos)
+        private Task<bool> GuardarRegistroAsync<T>(string titulo, T original, Func<T> crear,
+            params CampoRegistro[] campos) where T : class
+        {
+            return AbrirRegistroAsync(titulo, () => original == null ? consulta.AgregarAsync(sesion, crear())
+                : consulta.ActualizarAsync(sesion, crear(), original), campos);
+        }
+
+        private async Task<bool> AbrirRegistroAsync(string titulo, Func<Task> guardar, params CampoRegistro[] campos)
         {
             if (IsDisposed || Disposing) return false;
             using (var editor = new EditorRegistro(titulo, campos))
