@@ -30,6 +30,12 @@ namespace Logica
         Task EliminarAsync<T>(SesionUsuario sesion, int id) where T : class;
     }
 
+    public interface IConsultaAsistenciaHospitalaria
+    {
+        Task<List<RegistroAsistencia>> ConsultarAsistenciaAsync(DateTime desde, DateTime hasta,
+            int? idEmpleado, int? idSede, int? idUnidad, string busqueda);
+    }
+
     public sealed class CuentaAdministrada
     {
         public int IdUsuario { get; set; }

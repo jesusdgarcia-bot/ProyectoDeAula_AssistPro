@@ -50,6 +50,10 @@
     <Compile Include="Class1.cs" />
     <Compile Include="PlantillaFacial.cs" />
     <Compile Include="ServicioReconocimientoFacial.cs" />
+    <Compile Include="ServicioMarcacionFacial.cs" />
+    <Compile Include="ServicioMarcacionConClave.cs" />
+    <Compile Include="PlanificacionTurnos.cs" />
+    <Compile Include="SesionPruebaDeVida.cs" />
     <Compile Include="IConsultaAdministracion.cs" />
     <Compile Include="ResumenDashboard.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

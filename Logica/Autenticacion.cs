@@ -19,6 +19,7 @@ namespace Logica
         public int IdUsuario { get; private set; }
         public int IdEmpleado { get; private set; }
         public int IdRol { get; private set; }
+        public string NombreUsuario { get; }
         public string Nombre { get; private set; }
         public string Rol { get; private set; }
         public bool EsAdministrador => EsRolAdministrador(Rol);
@@ -35,6 +36,7 @@ namespace Logica
             IdUsuario = usuario.IdUsuario;
             IdEmpleado = usuario.IdEmpleado;
             IdRol = usuario.IdRol;
+            NombreUsuario = usuario.NombreUsuario;
             Nombre = usuario.Empleado.Nombres + " " + usuario.Empleado.Apellidos;
             Rol = usuario.Rol.NombreRol;
         }

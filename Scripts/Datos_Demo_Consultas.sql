@@ -1,13 +1,14 @@
--- AssistPro. Datos sintéticos para las cuatro consultas de sustentación.
--- Ejecutar con F5 en SQL Developer, conectado al esquema ASISTENCIA.
+-- AssistPRO Hospital. Datos sintéticos para probar la asistencia y los turnos.
+-- Ejecutar con F5 en SQL Developer, conectado a una base de pruebas con el esquema ASISTENCIA.
 -- Cada ejecución agrega un lote nuevo. Consultar en la misma sesión.
 
 DECLARE
-    v_hoy             CONSTANT DATE := TRUNC(SYSDATE);
+    v_hoy             CONSTANT DATE := TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS DATE));
     v_lote            CONSTANT VARCHAR2(13) := SUBSTR(RAWTOHEX(SYS_GUID()), 1, 13);
     v_id_sede         ASISTENCIA.SEDE.ID_SEDE%TYPE;
     v_id_departamento ASISTENCIA.DEPARTAMENTO.ID_DEPARTAMENTO%TYPE;
     v_id_cargo        ASISTENCIA.CARGO.ID_CARGO%TYPE;
+    v_id_turno        ASISTENCIA.HORARIO.ID_HORARIO%TYPE;
     v_id_dispositivo  ASISTENCIA.DISPOSITIVO_BIOMETRICO.ID_DISPOSITIVO%TYPE;
     v_id_tipo_novedad ASISTENCIA.TIPO_NOVEDAD.ID_TIPO_NOVEDAD%TYPE;
     v_id_ana          ASISTENCIA.EMPLEADO.ID_EMPLEADO%TYPE;
@@ -30,15 +31,15 @@ BEGIN
     SAVEPOINT carga_demo_assistpro;
 
     INSERT INTO ASISTENCIA.SEDE (NOMBRE_SEDE, CIUDAD, DIRECCION)
-    VALUES ('Sede Demo AssistPro', 'Valledupar', 'Direccion de prueba')
+    VALUES ('Hospital Demo AssistPRO', 'Valledupar', 'Direccion de prueba')
     RETURNING ID_SEDE INTO v_id_sede;
 
     INSERT INTO ASISTENCIA.DEPARTAMENTO (NOMBRE_DEPARTAMENTO, ID_SEDE)
-    VALUES ('Operaciones Demo', v_id_sede)
+    VALUES ('Urgencias Demo', v_id_sede)
     RETURNING ID_DEPARTAMENTO INTO v_id_departamento;
 
     INSERT INTO ASISTENCIA.CARGO (NOMBRE_CARGO)
-    VALUES ('Auxiliar Demo')
+    VALUES ('Auxiliar de enfermeria Demo')
     RETURNING ID_CARGO INTO v_id_cargo;
 
     INSERT INTO ASISTENCIA.EMPLEADO (
@@ -62,14 +63,21 @@ BEGIN
     INSERT INTO ASISTENCIA.DISPOSITIVO_BIOMETRICO (
         ID_SEDE, NOMBRE_DISPOSITIVO, TIPO_DISPOSITIVO, ESTADO
     ) VALUES (
-        v_id_sede, 'Terminal Demo AssistPro', 'Huella', 'A'
+        v_id_sede, 'Terminal Urgencias Demo', 'Asistencia', 'A'
     )
     RETURNING ID_DISPOSITIVO INTO v_id_dispositivo;
 
+    INSERT INTO ASISTENCIA.HORARIO (NOMBRE_HORARIO, HORA_ENTRADA, HORA_SALIDA, DIAS_APLICABLES)
+    VALUES ('Guardia nocturna Demo', DATE '2000-01-01' + 19 / 24, DATE '2000-01-01' + 7 / 24, 'Todos')
+    RETURNING ID_HORARIO INTO v_id_turno;
+
+    INSERT INTO ASISTENCIA.EMPLEADO_HORARIO (ID_EMPLEADO, ID_HORARIO, FECHA_INICIO, FECHA_FIN)
+    VALUES (v_id_luis, v_id_turno, v_hoy - 1, v_hoy + 7);
+
     agregar_marcacion(v_id_ana,  v_hoy, 8,  'ENTRADA');
-    agregar_marcacion(v_id_luis, v_hoy, 9,  'ENTRADA');
+    agregar_marcacion(v_id_luis, v_hoy - 1, 19, 'ENTRADA');
     agregar_marcacion(v_id_ana,  v_hoy, 16, 'SALIDA');
-    agregar_marcacion(v_id_luis, v_hoy, 17, 'SALIDA');
+    agregar_marcacion(v_id_luis, v_hoy, 7, 'SALIDA');
     agregar_marcacion(v_id_ana,  v_hoy - 1, 8,  'ENTRADA');
     agregar_marcacion(v_id_ana,  v_hoy - 1, 16, 'SALIDA');
 

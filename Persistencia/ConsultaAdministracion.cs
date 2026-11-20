@@ -12,7 +12,7 @@ using Oracle.ManagedDataAccess.Client;
 
 namespace Persistencia
 {
-    public sealed class ConsultaAdministracion : IConsultaAdministracion
+    public sealed class ConsultaAdministracion : IConsultaAdministracion, IConsultaAsistenciaHospitalaria
     {
         private const int LongitudMinimaClave = 8;
         private static readonly Dictionary<Type, string> clavesAdministradas = new Dictionary<Type, string>
@@ -115,8 +115,14 @@ namespace Persistencia
         public Task<List<RegistroAsistencia>> ConsultarAsistenciaAsync(DateTime desde, DateTime hasta, int? idEmpleado = null,
             string busqueda = null)
         {
+            return ConsultarAsistenciaAsync(desde, hasta, idEmpleado, null, null, busqueda);
+        }
+
+        public Task<List<RegistroAsistencia>> ConsultarAsistenciaAsync(DateTime desde, DateTime hasta,
+            int? idEmpleado, int? idSede, int? idUnidad, string busqueda)
+        {
             return ConsultaAsistencia.ConsultarRegistrosAsync(desde, hasta, idEmpleado, incluirDetalle: true,
-                busqueda: busqueda);
+                busqueda: busqueda, idSede: idSede, idUnidad: idUnidad);
         }
 
         public async Task<List<Empleado>> ListarEmpleadosAsync()

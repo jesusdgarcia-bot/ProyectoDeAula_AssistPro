@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Configuration;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -25,9 +26,13 @@ namespace WindowsForms_Presentacion
         private readonly Logica.IConsultaAsistencia consultaAsistencia;
         private readonly Logica.IConsultaAdministracion consultaAdministracion;
         private readonly Logica.ServicioReconocimientoFacial reconocimientoFacial;
+        private readonly Logica.ServicioMarcacionFacial marcacionFacial;
+        private readonly Logica.ServicioMarcacionConClave marcacionConClave;
+        private readonly bool reconocimientoHabilitado =
+            bool.TryParse(ConfigurationManager.AppSettings["HabilitarBiometriaFacial"], out var habilitado) && habilitado;
         private bool autenticando;
         public Logica.SesionUsuario SesionActual { get; private set; }
-        private static string EstadoActivo => System.Configuration.ConfigurationManager.AppSettings["EstadoActivo"] ?? "A";
+        private static string EstadoActivo => ConfigurationManager.AppSettings["EstadoActivo"] ?? "A";
 
         public Form1() : this(new Logica.ServicioAutenticacion(
             new Persistencia.RepositorioUsuarios(), new Logica.ClavesPbkdf2(),
@@ -46,9 +51,15 @@ namespace WindowsForms_Presentacion
             this.autenticacion = autenticacion ?? throw new ArgumentNullException(nameof(autenticacion));
             this.consultaAsistencia = consultaAsistencia ?? throw new ArgumentNullException(nameof(consultaAsistencia));
             this.consultaAdministracion = consultaAdministracion ?? throw new ArgumentNullException(nameof(consultaAdministracion));
-            reconocimientoFacial = new Logica.ServicioReconocimientoFacial(new Persistencia.RepositorioFacial(EstadoActivo), EstadoActivo);
+            var repositorioMarcacion = new Persistencia.RepositorioMarcacionFacial(EstadoActivo);
+            marcacionConClave = new Logica.ServicioMarcacionConClave(autenticacion, repositorioMarcacion);
+            if (reconocimientoHabilitado)
+            {
+                reconocimientoFacial = new Logica.ServicioReconocimientoFacial(new Persistencia.RepositorioFacial(EstadoActivo), EstadoActivo);
+                marcacionFacial = new Logica.ServicioMarcacionFacial(reconocimientoFacial, repositorioMarcacion);
+            }
             InitializeComponent();
-            Text = "AssistPRO | Acceso";
+            Text = "AssistPRO | Acceso del personal";
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleDimensions = new SizeF(96, 96);
             AutoScaleMode = AutoScaleMode.Dpi;
@@ -94,11 +105,13 @@ namespace WindowsForms_Presentacion
             TemaAplicacion.DefinirRol(layout, RolTema.Superficie);
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Agregar(layout, Texto("Iniciar sesión", 25, RolTema.Normal, FontStyle.Bold), 0, 5);
-            var instrucciones = Texto("Selecciona tu perfil e ingresa tus credenciales.", 10, RolTema.TextoSecundario);
-            Agregar(layout, instrucciones, 0, 24);
+            var instrucciones = Texto(reconocimientoHabilitado
+                ? "Selecciona tu perfil. Si llevas equipo de protección, usa tu contraseña."
+                : "Selecciona tu perfil e ingresa tus credenciales.", 10, RolTema.TextoSecundario);
+            Agregar(layout, instrucciones, 0, 20);
 
             Agregar(layout, Texto("Perfil de acceso", 10, RolTema.TextoSecundario), 0, 5);
-            Agregar(layout, perfilAcceso, 0, 20);
+            Agregar(layout, perfilAcceso, 0, 18);
 
             Agregar(layout, Texto("Nombre de usuario", 10, RolTema.TextoSecundario), 0, 7);
             Agregar(layout, Campo(usuario, false), 0, 0);
@@ -124,17 +137,16 @@ namespace WindowsForms_Presentacion
             estado.Font = new Font(Font.FontFamily, 10);
             estado.TextChanged += (s, e) => estado.Visible = estado.Text.Length > 0;
             Agregar(layout, estado, 10, 0);
-            Agregar(layout, Texto("Acceso biométrico", 9, RolTema.TextoSecundario), 24, 9);
-            var biometria = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
-            biometria.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            biometria.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            var huella = new AccesoButton { Text = "Huella dactilar", Icono = "huella", Plano = true, Height = 44, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 5, 0), Font = new Font(Font.FontFamily, 10) };
-            var rostro = new AccesoButton { Text = "Rostro", Icono = "rostro", Plano = true, Height = 44, Dock = DockStyle.Fill, Margin = new Padding(5, 0, 0, 0), Font = huella.Font };
-            huella.Click += (s, e) => estado.Text = "El acceso por huella aún no está habilitado. Utiliza tu usuario y contraseña.";
-            rostro.Click += ValidarAccesoFacial;
-            biometria.Controls.Add(huella, 0, 0);
-            biometria.Controls.Add(rostro, 1, 0);
-            Agregar(layout, biometria, 0, 0);
+            if (reconocimientoHabilitado)
+            {
+                var rostro = new AccesoButton
+                {
+                    Text = "Entrar con el rostro", Icono = "rostro", Plano = true, Height = 44,
+                    Font = new Font(Font.FontFamily, 10, FontStyle.Bold)
+                };
+                rostro.Click += ValidarAccesoFacial;
+                Agregar(layout, rostro, 12, 0);
+            }
             composicion.Controls.Add(layout, 1, 0);
             scroll.Controls.Add(composicion);
             raiz.Controls.Add(scroll, 0, 1);
@@ -212,10 +224,10 @@ namespace WindowsForms_Presentacion
             presentacion.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             presentacion.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             presentacion.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
-            var titulo = Texto("Gestión de asistencia\npara tu empresa.", 32, RolTema.Normal, FontStyle.Bold);
+            var titulo = Texto("Asistencia\nhospitalaria", 44, RolTema.Normal, FontStyle.Bold);
             titulo.Dock = DockStyle.Fill;
             titulo.Margin = Padding.Empty;
-            var descripcion = Texto("Consulta marcaciones, administra el personal y revisa los reportes de tu empresa.",
+            var descripcion = Texto("Consulta tus turnos o gestiona las entradas y salidas del personal del hospital.",
                 12, RolTema.TextoSecundario);
             descripcion.Dock = DockStyle.Fill;
             descripcion.Margin = new Padding(0, 20, 0, 0);
@@ -273,20 +285,7 @@ namespace WindowsForms_Presentacion
             campo.Cursor = Cursors.IBeam;
             campo.UseSystemPasswordChar = password;
             campo.AccessibleName = password ? "Contraseña" : "Nombre de usuario";
-            campo.AccessibleDescription = password ? "Ingresa tu contraseña" : "Ej. juan.perez";
             interior.Controls.Add(campo);
-            var ejemplo = new Label
-            {
-                Text = campo.AccessibleDescription, Font = campo.Font, Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Cursor = Cursors.IBeam,
-                TabStop = false, Visible = campo.TextLength == 0 && !campo.Focused, UseMnemonic = false
-            };
-            TemaAplicacion.DefinirRol(ejemplo, RolTema.TextoSecundario);
-            ejemplo.Click += (s, e) => campo.Focus();
-            EventHandler actualizarEjemplo = (s, e) => ejemplo.Visible = campo.TextLength == 0 && !campo.Focused;
-            campo.TextChanged += actualizarEjemplo;
-            campo.GotFocus += actualizarEjemplo;
-            campo.LostFocus += actualizarEjemplo;
             MouseEventHandler enfocarCampo = (s, e) =>
             {
                 if (e.Button == MouseButtons.Left) campo.Focus();
@@ -294,8 +293,6 @@ namespace WindowsForms_Presentacion
             borde.MouseDown += enfocarCampo;
             linea.MouseDown += enfocarCampo;
             interior.MouseDown += enfocarCampo;
-            interior.Controls.Add(ejemplo);
-            ejemplo.BringToFront();
             linea.Controls.Add(interior, 0, 0);
 
             if (password)
@@ -333,7 +330,7 @@ namespace WindowsForms_Presentacion
         private async void ValidarAcceso(object sender, EventArgs e)
         {
             if (autenticando || SesionActual != null) return;
-            errorUsuario.Text = string.IsNullOrWhiteSpace(usuario.Text) ? "Escribe tu usuario o ID de colaborador." : "";
+            errorUsuario.Text = string.IsNullOrWhiteSpace(usuario.Text) ? "Escribe tu nombre de usuario." : "";
             errorClave.Text = string.IsNullOrEmpty(clave.Text) ? "Escribe tu contraseña." : "";
             if (errorUsuario.Text.Length > 0) { usuario.Focus(); return; }
             if (errorClave.Text.Length > 0) { clave.Focus(); return; }
@@ -378,7 +375,7 @@ namespace WindowsForms_Presentacion
 
         private async void ValidarAccesoFacial(object sender, EventArgs e)
         {
-            if (autenticando || SesionActual != null) return;
+            if (!reconocimientoHabilitado || autenticando || SesionActual != null) return;
             autenticando = true;
             bool accesoAdministrador = perfilAcceso.Checked;
             var boton = (Button)sender;
@@ -396,7 +393,7 @@ namespace WindowsForms_Presentacion
                         return;
                     }
                     estado.Text = "Comparando con los rostros registrados…";
-                    var sesion = await reconocimientoFacial.AutenticarAsync(captura.Caracteristicas);
+                    var sesion = await reconocimientoFacial.AutenticarAsync(captura.Captura);
                     if (IsDisposed) return;
                     if (sesion == null)
                     {
@@ -436,8 +433,8 @@ namespace WindowsForms_Presentacion
             try
             {
                 using (Form principal = sesion.EsAdministrador
-                    ? (Form)new FrmAdministrador(sesion, consultaAdministracion)
-                    : new FrmPrincipal(sesion, consultaAsistencia))
+                    ? (Form)new FrmAdministrador(sesion, consultaAdministracion, reconocimientoHabilitado)
+                    : new FrmPrincipal(sesion, consultaAsistencia, marcacionFacial, marcacionConClave))
                 {
                     Hide();
                     principal.ShowDialog();
@@ -479,27 +476,23 @@ namespace WindowsForms_Presentacion
             e.Graphics.Clear(Parent?.BackColor ?? paleta.Fondo);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             var rect = new Rectangle(1, 1, Width - 3, Height - 3);
-            using (var path = new GraphicsPath())
+            if (rect.Width <= 0 || rect.Height <= 0) return;
+            using (var path = DibujoAcceso.Redondeado(rect, 8 * DeviceDpi / 96f))
             {
-                const int diameter = 20;
-                path.AddArc(rect.Left, rect.Top, diameter, diameter, 180, 90);
-                path.AddArc(rect.Right - diameter, rect.Top, diameter, diameter, 270, 90);
-                path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
-                path.AddArc(rect.Left, rect.Bottom - diameter, diameter, diameter, 90, 90);
-                path.CloseFigure();
-                bool hover = ClientRectangle.Contains(PointToClient(MousePosition));
-                Color fill = hover && Enabled ? ControlPaint.Light(BackColor, .12f) : BackColor;
-                if (Plano)
+                bool hover = Enabled && ClientRectangle.Contains(PointToClient(MousePosition));
+                Color fill = !Enabled ? paleta.Entrada : Principal ? paleta.PrimarioFin : BackColor;
+                if (hover) fill = ControlPaint.Light(fill, .12f);
+                if (Plano || !Enabled)
                 {
-                    using (var brush = new SolidBrush(Principal ? paleta.PrimarioFin : fill))
+                    using (var brush = new SolidBrush(fill))
                         e.Graphics.FillPath(brush, path);
                 }
                 else
                 {
-                    using (var brush = new LinearGradientBrush(rect, Principal ? paleta.PrimarioInicio : ControlPaint.Light(fill, .08f), Principal ? paleta.PrimarioFin : fill, 90f))
+                    using (var brush = new LinearGradientBrush(rect, Principal ? paleta.PrimarioInicio : ControlPaint.Light(fill, .08f), fill, 90f))
                         e.Graphics.FillPath(brush, path);
                 }
-                using (var pen = new Pen(Focused ? paleta.BordeFoco : paleta.Borde, Focused ? 2 : 1))
+                using (var pen = new Pen(Focused ? paleta.BordeFoco : Principal && Enabled ? fill : paleta.Borde, Focused ? 2 : 1))
                     e.Graphics.DrawPath(pen, path);
             }
             var texto = Rectangle.Inflate(ClientRectangle, -12, -4);

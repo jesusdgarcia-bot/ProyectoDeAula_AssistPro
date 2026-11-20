@@ -10,6 +10,7 @@ namespace WindowsForms_Presentacion
         Normal,
         Lateral,
         Superficie,
+        Video,
         Entrada,
         TextoSecundario,
         Error,
@@ -53,24 +54,24 @@ namespace WindowsForms_Presentacion
     {
         private static readonly PaletaTema Oscuro = new PaletaTema
         {
-            Fondo = Color.FromArgb(13, 10, 20),
-            Lateral = Color.FromArgb(25, 16, 39),
-            Superficie = Color.FromArgb(24, 18, 35),
-            Entrada = Color.FromArgb(17, 12, 26),
-            Texto = Color.FromArgb(244, 237, 249),
-            TextoSecundario = Color.FromArgb(204, 185, 225),
+            Fondo = Color.FromArgb(16, 17, 23),
+            Lateral = Color.FromArgb(22, 23, 32),
+            Superficie = Color.FromArgb(28, 29, 40),
+            Entrada = Color.FromArgb(20, 21, 30),
+            Texto = Color.FromArgb(246, 244, 250),
+            TextoSecundario = Color.FromArgb(185, 185, 205),
             Error = Color.FromArgb(255, 178, 190),
             Enlace = Color.FromArgb(201, 165, 255),
-            Borde = Color.FromArgb(112, 80, 149),
+            Borde = Color.FromArgb(83, 81, 108),
             BordeFoco = Color.FromArgb(224, 204, 255),
-            EncabezadoTabla = Color.FromArgb(49, 30, 70),
-            TextoTabla = Color.FromArgb(231, 220, 245),
-            AlternanciaTabla = Color.FromArgb(30, 22, 43),
-            LineaTabla = Color.FromArgb(55, 38, 73),
-            SeleccionTabla = Color.FromArgb(85, 48, 124),
+            EncabezadoTabla = Color.FromArgb(37, 38, 52),
+            TextoTabla = Color.FromArgb(233, 230, 243),
+            AlternanciaTabla = Color.FromArgb(32, 33, 46),
+            LineaTabla = Color.FromArgb(49, 49, 67),
+            SeleccionTabla = Color.FromArgb(67, 48, 108),
             TextoSeleccionTabla = Color.White,
-            PrimarioInicio = Color.FromArgb(154, 62, 221),
-            PrimarioFin = Color.FromArgb(107, 26, 188),
+            PrimarioInicio = Color.FromArgb(128, 75, 219),
+            PrimarioFin = Color.FromArgb(105, 58, 194),
             TextoPrimario = Color.White,
             Icono = Color.FromArgb(221, 192, 255),
             FondoIcono = Color.FromArgb(83, 37, 127),
@@ -82,21 +83,21 @@ namespace WindowsForms_Presentacion
 
         private static readonly PaletaTema Claro = new PaletaTema
         {
-            Fondo = Color.FromArgb(246, 243, 250),
-            Lateral = Color.FromArgb(235, 228, 244),
+            Fondo = Color.FromArgb(245, 245, 251),
+            Lateral = Color.FromArgb(235, 235, 246),
             Superficie = Color.White,
             Entrada = Color.White,
-            Texto = Color.FromArgb(36, 27, 50),
-            TextoSecundario = Color.FromArgb(98, 83, 111),
+            Texto = Color.FromArgb(32, 30, 48),
+            TextoSecundario = Color.FromArgb(85, 81, 109),
             Error = Color.FromArgb(172, 41, 66),
             Enlace = Color.FromArgb(99, 49, 162),
-            Borde = Color.FromArgb(143, 120, 166),
+            Borde = Color.FromArgb(157, 151, 181),
             BordeFoco = Color.FromArgb(116, 59, 176),
-            EncabezadoTabla = Color.FromArgb(231, 221, 240),
-            TextoTabla = Color.FromArgb(48, 35, 60),
-            AlternanciaTabla = Color.FromArgb(248, 245, 252),
-            LineaTabla = Color.FromArgb(221, 210, 232),
-            SeleccionTabla = Color.FromArgb(222, 202, 244),
+            EncabezadoTabla = Color.FromArgb(235, 233, 245),
+            TextoTabla = Color.FromArgb(48, 44, 66),
+            AlternanciaTabla = Color.FromArgb(249, 248, 253),
+            LineaTabla = Color.FromArgb(222, 219, 235),
+            SeleccionTabla = Color.FromArgb(226, 214, 250),
             TextoSeleccionTabla = Color.FromArgb(44, 20, 68),
             PrimarioInicio = Color.FromArgb(137, 58, 201),
             PrimarioFin = Color.FromArgb(99, 35, 166),
@@ -113,12 +114,31 @@ namespace WindowsForms_Presentacion
             new ConditionalWeakTable<Control, EstiloControl>();
         private static event EventHandler Cambiado;
 
-        internal static bool EsOscuro { get; private set; } = true;
+        internal static bool EsOscuro { get; private set; } = false;
         internal static PaletaTema Actual => EsOscuro ? Oscuro : Claro;
 
         internal static void DefinirRol(Control control, RolTema rol)
         {
             estilos.GetOrCreateValue(control).Rol = rol;
+        }
+
+        internal static Control CrearMarca()
+        {
+            var marca = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+                Margin = Padding.Empty
+            };
+            marca.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
+            marca.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            marca.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            marca.Controls.Add(new MarcaAcceso { Dock = DockStyle.Fill, Margin = new Padding(0, 2, 8, 2) }, 0, 0);
+            marca.Controls.Add(new Label
+            {
+                Text = "AssistPRO", Dock = DockStyle.Fill, Margin = Padding.Empty,
+                TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 17, FontStyle.Bold)
+            }, 1, 0);
+            return marca;
         }
 
         internal static SelectorDeslizante CrearSelectorTema()
@@ -231,6 +251,9 @@ namespace WindowsForms_Presentacion
                     break;
                 case RolTema.Superficie:
                     control.BackColor = paleta.Superficie;
+                    break;
+                case RolTema.Video:
+                    control.BackColor = Color.Black;
                     break;
                 case RolTema.Entrada:
                     control.BackColor = paleta.Entrada;

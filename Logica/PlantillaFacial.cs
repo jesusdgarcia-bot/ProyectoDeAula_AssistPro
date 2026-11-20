@@ -85,5 +85,10 @@ namespace Logica
                 producto += (double)caracteristicas[i] * otra.caracteristicas[i];
             return Math.Max(-1, Math.Min(1, producto));
         }
+
+        internal void AcumularEn(float[] suma)
+        {
+            for (int i = 0; i < Dimensiones; i++) suma[i] += caracteristicas[i];
+        }
     }
 }

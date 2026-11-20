@@ -20,15 +20,15 @@ namespace WindowsForms_Presentacion
 
         private void ConfigurarDashboard()
         {
-            modulos.Items.Add("Dashboard");
+            modulos.Items.Add("Resumen");
             vistas.Add(new Vista { EsDashboard = true });
             MostrarReporteDashboard(0);
         }
 
         private Control CrearFiltrosDashboard()
         {
-            var hoy = DateTime.Today;
-            filtrosDashboard.Size = new Size(288, 52);
+            var hoy = PlanificacionTurnos.AhoraColombia.Date;
+            filtrosDashboard.Size = new Size(272, 49);
             filtrosDashboard.WrapContents = false;
             filtrosDashboard.Visible = false;
             filtrosDashboard.Margin = Padding.Empty;
@@ -47,30 +47,62 @@ namespace WindowsForms_Presentacion
             contenidoDashboard.ColumnCount = 1;
             contenidoDashboard.RowCount = 3;
             contenidoDashboard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
-            contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+            var filaIndicadores = new RowStyle(SizeType.Absolute, 103);
+            contenidoDashboard.RowStyles.Add(filaIndicadores);
+            contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             var indicadores = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, Margin = Padding.Empty, ColumnCount = 4, RowCount = 1,
-                AccessibleName = "Indicadores de la empresa"
+                AccessibleName = "Indicadores de asistencia del hospital"
             };
             indicadores.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             for (int indice = 0; indice < valoresDashboard.Length; indice++)
                 indicadores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-            indicadores.Controls.Add(CrearIndicador(0, "Empleados\nactivos hoy", RolTema.AcentoMorado), 0, 0);
-            indicadores.Controls.Add(CrearIndicador(1, "Empleados con\nmarcaciones", RolTema.AcentoAzul), 1, 0);
-            indicadores.Controls.Add(CrearIndicador(2, "Marcaciones\ndel periodo", RolTema.AcentoVerde), 2, 0);
-            indicadores.Controls.Add(CrearIndicador(3, "Novedades\ndel periodo", RolTema.AcentoNaranja), 3, 0);
+            var tarjetas = new[]
+            {
+                CrearIndicador(0, "Personal\nactivo hoy", RolTema.AcentoMorado),
+                CrearIndicador(1, "Personal con\nmarcaciones", RolTema.AcentoAzul),
+                CrearIndicador(2, "Marcaciones\ndel periodo", RolTema.AcentoVerde),
+                CrearIndicador(3, "Novedades\ndel periodo", RolTema.AcentoNaranja)
+            };
+            for (int indice = 0; indice < tarjetas.Length; indice++) indicadores.Controls.Add(tarjetas[indice], indice, 0);
             contenidoDashboard.Controls.Add(indicadores, 0, 0);
+            contenidoDashboard.SizeChanged += (origen, evento) =>
+            {
+                float escala = DeviceDpi / 96F;
+                bool dosFilas = contenidoDashboard.ClientSize.Width < 580 * escala && contenidoDashboard.ClientSize.Height >= 344 * escala;
+                var columnas = dosFilas ? 2 : tarjetas.Length;
+                if (indicadores.ColumnCount == columnas) return;
+
+                contenidoDashboard.SuspendLayout();
+                indicadores.SuspendLayout();
+                indicadores.ColumnCount = columnas;
+                indicadores.RowCount = tarjetas.Length / columnas;
+                indicadores.ColumnStyles.Clear();
+                indicadores.RowStyles.Clear();
+                for (int columna = 0; columna < columnas; columna++)
+                    indicadores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columnas));
+                for (int fila = 0; fila < indicadores.RowCount; fila++)
+                    indicadores.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / indicadores.RowCount));
+                for (int indice = 0; indice < tarjetas.Length; indice++)
+                {
+                    int columna = indice % columnas;
+                    indicadores.SetCellPosition(tarjetas[indice], new TableLayoutPanelCellPosition(columna, indice / columnas));
+                    tarjetas[indice].Margin = new Padding(0, 0, columna == columnas - 1 ? 0 : (int)(8 * escala), (int)(8 * escala));
+                }
+                filaIndicadores.Height = (dosFilas ? 186 : 103) * escala;
+                indicadores.ResumeLayout(true);
+                contenidoDashboard.ResumeLayout(true);
+            };
 
             var reportes = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Margin = new Padding(0, 4, 0, 8)
+                Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Margin = new Padding(0, 3, 0, 8)
             };
             reportes.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            reportes.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            reportes.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 84));
             for (int indice = 0; indice < botonesReporte.Length; indice++)
                 reportes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / botonesReporte.Length));
             reportes.Controls.Add(new Label
@@ -79,13 +111,12 @@ namespace WindowsForms_Presentacion
                 Font = new Font(Font.FontFamily, 14F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft
             }, 0, 0);
             reportes.Controls.Add(CrearBotonReporte(0, "Por día", "Marcaciones por día"), 1, 0);
-            reportes.Controls.Add(CrearBotonReporte(1, "Departamento", "Marcaciones por departamento"), 2, 0);
+            reportes.Controls.Add(CrearBotonReporte(1, "Por unidad", "Marcaciones por unidad o servicio"), 2, 0);
             reportes.Controls.Add(CrearBotonReporte(2, "Novedades", "Novedades por estado"), 3, 0);
             contenidoDashboard.Controls.Add(reportes, 0, 1);
 
             ConfigurarTabla(tablaDashboard);
             tablaDashboard.Margin = Padding.Empty;
-            tablaDashboard.RowTemplate.Height = 34;
             contenidoDashboard.Controls.Add(tablaDashboard, 0, 2);
             return contenidoDashboard;
         }
@@ -100,16 +131,16 @@ namespace WindowsForms_Presentacion
             };
             TemaAplicacion.DefinirRol(tarjeta, RolTema.Superficie);
             tarjeta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            tarjeta.RowStyles.Add(new RowStyle(SizeType.Absolute, 3));
+            tarjeta.RowStyles.Add(new RowStyle(SizeType.Absolute, 2));
             tarjeta.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            tarjeta.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            tarjeta.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
             var banda = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
             TemaAplicacion.DefinirRol(banda, acento);
             tarjeta.Controls.Add(banda, 0, 0);
             valoresDashboard[indice] = new Label
             {
                 Text = "—", Dock = DockStyle.Fill, Margin = new Padding(10, 0, 2, 0),
-                Font = new Font(Font.FontFamily, 22F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font(Font.FontFamily, 21F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft,
                 AccessibleName = etiqueta.Replace('\n', ' '), AutoEllipsis = true
             };
             TemaAplicacion.DefinirRol(valoresDashboard[indice], acento);
@@ -117,7 +148,7 @@ namespace WindowsForms_Presentacion
             var nombre = new Label
             {
                 Text = etiqueta, Dock = DockStyle.Fill, Margin = new Padding(11, 0, 2, 0),
-                ForeColor = TextoSecundario, Font = new Font(Font.FontFamily, 10F)
+                ForeColor = TextoSecundario, Font = new Font(Font.FontFamily, 9.5F), AutoEllipsis = true
             };
             TemaAplicacion.DefinirRol(nombre, RolTema.TextoSecundario);
             tarjeta.Controls.Add(nombre, 0, 2);
@@ -129,7 +160,7 @@ namespace WindowsForms_Presentacion
             var boton = new AccesoButton
             {
                 Text = texto, AccessibleName = nombreAccesible, Dock = DockStyle.Fill, BackColor = EncabezadoTabla,
-                Font = new Font(Font.FontFamily, 10F),
+                Font = new Font(Font.FontFamily, 10F), Plano = true,
                 Margin = new Padding(0, 0, indice == botonesReporte.Length - 1 ? 0 : 8, 0)
             };
             boton.Click += (origen, evento) => MostrarReporteDashboard(indice);
@@ -141,7 +172,7 @@ namespace WindowsForms_Presentacion
         {
             LimpiarDashboard();
             if (contenidoDashboard.Visible)
-                estado.Text = "Pulsa Actualizar vista para consultar el periodo seleccionado.";
+                estado.Text = "Pulsa Actualizar para consultar el periodo seleccionado.";
         }
 
         private void LimpiarDashboard()
@@ -164,7 +195,7 @@ namespace WindowsForms_Presentacion
             }
 
             CambiarCarga(true);
-            estado.Text = "Consultando estadísticas de la empresa…";
+            estado.Text = "Consultando la asistencia del personal…";
             try
             {
                 var resumen = await consulta.ObtenerDashboardAsync(sesion, inicio, fin);
@@ -181,7 +212,7 @@ namespace WindowsForms_Presentacion
                 if (IsDisposed || Disposing) return;
                 LimpiarDashboard();
                 estado.Text = error is UnauthorizedAccessException ? error.Message
-                    : "No se pudo cargar el dashboard. Pulsa Actualizar vista.";
+                    : "No se pudo cargar el resumen. Pulsa Actualizar.";
             }
             finally
             {
@@ -219,15 +250,15 @@ namespace WindowsForms_Presentacion
                     break;
                 case 1:
                     AgregarColumnaReporte("Sede", 101);
-                    AgregarColumnaReporte("Departamento", 140);
-                    AgregarColumnaReporte("Empleados", 115, "N0");
+                    AgregarColumnaReporte("Unidad o servicio", 140);
+                    AgregarColumnaReporte("Personal", 115, "N0");
                     AgregarColumnaReporte("Marcaciones", 124, "N0");
                     if (resumenDashboard == null) return;
                     foreach (var departamento in resumenDashboard.MarcacionesPorDepartamento)
                         tablaDashboard.Rows.Add(departamento.Sede, departamento.Departamento,
                             departamento.EmpleadosConMarcaciones, departamento.TotalMarcaciones);
                     estado.Text = tablaDashboard.Rows.Count == 0 ? "No hay marcaciones en el periodo seleccionado."
-                        : "Sede y departamento según la asignación actual del empleado.";
+                        : "Agrupado por la unidad y sede que figuran en la ficha actual del empleado.";
                     break;
                 case 2:
                     AgregarColumnaReporte("Estado de aprobación", 160);
@@ -246,7 +277,9 @@ namespace WindowsForms_Presentacion
         {
             var columna = new DataGridViewTextBoxColumn
             {
-                Name = nombre, HeaderText = nombre, FillWeight = peso, MinimumWidth = 64,
+                Name = nombre, HeaderText = nombre, FillWeight = peso,
+                MinimumWidth = TextRenderer.MeasureText(nombre, tablaDashboard.ColumnHeadersDefaultCellStyle.Font).Width
+                    + tablaDashboard.ColumnHeadersDefaultCellStyle.Padding.Horizontal + (int)(18 * DeviceDpi / 96F),
                 SortMode = DataGridViewColumnSortMode.Automatic
             };
             if (formato != null) columna.DefaultCellStyle.Format = formato;

@@ -1,41 +1,54 @@
-# ProyectoDeAula_AssistPro
+# AssistPRO Hospital
 
-Sistema de asistencia con biometría. .NET Framework 4.8 (WinForms) en capas
+Control de asistencia laboral del personal hospitalario. .NET Framework 4.8 (WinForms) en capas
 `Entidades` / `Persistencia` / `Logica` / `WindowsForms_Presentacion`, sobre **Oracle Database**.
 
 ## Iniciar la aplicación
 
-Abre la solución en Visual Studio y ejecuta `WindowsForms_Presentacion` como proyecto de inicio. La aplicación usa la conexión Oracle configurada en `WindowsForms_Presentacion/App.config`.
+Configura la conexión Oracle como se indica en **Base de datos**. Abre la solución en Visual Studio y ejecuta `WindowsForms_Presentacion` como proyecto de inicio en Windows x64.
 
-Inicia sesión con una cuenta activa registrada en `ASISTENCIA.USUARIO` y elige el perfil correspondiente. El empleado consulta sus registros en **Mi asistencia**. Una cuenta con rol `Administrador` o `Admin` abre el panel de administración.
+Inicia sesión con una cuenta activa y elige el perfil correspondiente. En **Mi asistencia** el personal puede marcar, consultar sus registros y ver su turno en curso o el siguiente programado. Las cuentas con rol `Administrador` o `Admin` abren el panel de administración.
 
-## Registrar datos desde el panel
+## Configuración y operación hospitalaria
 
-En el panel de administración, selecciona el módulo y pulsa **Agregar** o **Registrar marcación**. Los nuevos registros se guardan en Oracle. Si un formulario requiere una referencia, crea primero el registro en su módulo. Por ejemplo, crea una sede, un departamento y un cargo antes de agregar un empleado. Para crear una cuenta de acceso, selecciona el empleado y su rol.
+1. Registra las **Sedes**, las **Unidades y servicios** y los **Cargos** antes de agregar el personal y crear sus cuentas. En **Dispositivos**, asocia cada terminal de asistencia con la sede donde opera.
+2. Guarda el ID del terminal en `WindowsForms_Presentacion/AssistPRO.local.config` y recompila. En un equipo instalado, colócalo junto al ejecutable y reinicia AssistPRO. Las instalaciones anteriores pueden seguir usando `IdDispositivoFacial` como identificador del terminal.
 
-En **Asistencia** puedes consultar por rango de fechas y filtrar por empleado. Las marcaciones ingresadas desde el panel quedan identificadas como `Manual`. **Plantillas** permite consultar las plantillas biométricas y registrar un rostro.
+   ```xml
+   <appSettings>
+       <add key="IdTerminalAsistencia" value="ID_DEL_TERMINAL" />
+   </appSettings>
+   ```
 
-## Acceso con reconocimiento facial
+3. Define los **Turnos** y sus días de inicio, por ejemplo `Lun-Vie`, `Lun,Mié,Sáb` o `Todos`. Una salida anterior a la hora de entrada corresponde al día siguiente. Una guardia de 19:00 a 07:00 que empieza el último día de la asignación sigue vigente hasta las 07:00 del día posterior. Registra la vigencia en **Asignación de turnos**.
+4. En **Mi asistencia**, pulsa **Marcar entrada** o **Marcar salida** y confirma con la contraseña de la cuenta abierta. Puedes conservar puesto tu equipo de protección. Oracle usa la hora de Colombia y guarda cada marcación en su fecha real. Si una guardia cruza medianoche, la entrada y la salida pueden aparecer en fechas distintas. Se pueden registrar guardias extraordinarias aunque no haya un turno programado.
+5. En **Asistencia**, filtra por personal, sede del terminal y unidad o servicio actual del personal. El resumen por día agrupa por fecha calendario. Si alguien no pudo marcar, indica al administrador la fecha, la hora y el terminal para que use **Marcación manual** o corrija el registro cuando haya conexión. Las novedades son laborales y se describen sin incluir información de pacientes.
 
-1. Compila `WindowsForms_Presentacion` con Visual Studio en Windows de 64 bits. NuGet restaura OpenCvSharp y su runtime; la primera compilación descarga los modelos oficiales YuNet y SFace (~39 MB), verifica su SHA256 y los copia a `bin/.../Modelos`. Las siguientes compilaciones pueden reutilizarlos sin descargarlos.
-2. Inicia sesión con usuario y contraseña de un administrador. En **Plantillas > Registrar rostro**, selecciona un empleado activo que tenga una cuenta activa. Mira de frente a la cámara y pulsa **Registrar rostro** cuando esté listo. Se capturan tres muestras coherentes y se guarda una plantilla en Oracle. Si ese empleado ya tiene una plantilla facial, se reemplaza.
-3. Cierra la sesión, elige el perfil de la cuenta (**Empleado** o **Administrador**), pulsa **Rostro** y después **Verificar rostro**. El usuario y la contraseña pueden quedar vacíos para este acceso. Una coincidencia clara abre el mismo panel que el acceso con contraseña.
+## Piloto académico de verificación facial
 
-La captura exige una sola persona, el rostro completo y suficientemente cerca. Si la cámara falla, revisa los permisos para aplicaciones de escritorio en Windows y cierra otras aplicaciones que la estén usando. Puedes detenerla, cambiar su número (0 suele ser la cámara principal) y encenderla de nuevo. La clave `CamaraFacial` en `appSettings` permite elegir otro número inicial. Si OpenCV no carga, instala [Microsoft Visual C++ Redistributable x64](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
+La instalación hospitalaria se entrega con la cámara deshabilitada. El piloto usa un modelo con condiciones de investigación y educación. Antes de habilitarlo, revisa la autorización y el manejo de las plantillas con el responsable de protección de datos. La marcación con contraseña está disponible también en el piloto. [Orientación de la SIC sobre datos biométricos](https://sedeelectronica.sic.gov.co/sites/default/files/normatividad/Concepto_14-118247.pdf)
 
-Para preparar o reparar los modelos manualmente, desde la raíz del repositorio:
+En Windows x64, instala [Python 3.12 x64](https://www.python.org/downloads/windows/) y [Microsoft Visual C++ Redistributable 2015–2022 x64](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist). Desde la raíz prepara el entorno y, en la consola de desarrollador de Visual Studio, compila incluyendo los modelos.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Preparar-ModelosFaciales.ps1
+py -3.12 -m venv .venv-mediapipe
+.\.venv-mediapipe\Scripts\python.exe -m pip install mediapipe==0.10.35
+msbuild .\ProyectoDeAula_AssistPro.slnx /p:PrepararBiometriaFacial=true
 ```
 
-El procesamiento ocurre localmente. No se guardan fotos ni video: `PLANTILLA_BIOMETRICA.PLANTILLA` contiene un vector SFace normalizado y versionado con `TIPO_BIOMETRIA = Facial`. Se usa el esquema existente, sin migraciones. Como admite una sola plantilla por empleado, una biometría de otro tipo se conserva y bloquea el registro facial.
+Añade `HabilitarBiometriaFacial=true` como clave y valor en `AssistPRO.local.config`. Las compilaciones Debug y Release apuntan a `.venv-mediapipe`. Para usar otro intérprete, define `PythonMediaPipe` con su ruta absoluta en el mismo archivo. `CamaraFacial` controla el índice inicial de la cámara.
 
-La identificación rechaza similitudes de coseno inferiores a `0.45` y diferencias menores de `0.08` entre los dos mejores candidatos. Cuenta, empleado y rol se consultan de nuevo antes de abrir la sesión; los permisos del administrador también se validan en Oracle antes de guardar. Los umbrales necesitan validación con las cámaras e iluminación de uso. Este flujo no incluye detección de vida ni protección frente a fotografías o videos; si se requiere esa protección, el acceso facial necesita un mecanismo adicional de verificación. El algoritmo sigue el [flujo YuNet/SFace de OpenCV](https://docs.opencv.org/4.x/d0/dd4/tutorial_dnn_face.html).
+En **Biometría > Registrar rostro**, un administrador selecciona a una persona con cuenta activa. La persona completa la prueba de vida y se guarda su plantilla facial en Oracle. En **Mi asistencia**, quien elija **Verificar con el rostro** realiza una nueva prueba al marcar. El rostro reconocido debe corresponder a la cuenta abierta.
 
-## Pruebas de reconocimiento facial
+La prueba combina las señales de ojos y orientación de MediaPipe con el resultado del modelo antisuplantación ONNX. La secuencia y el lado del giro se eligen al azar. El video se procesa en memoria en el equipo. Oracle conserva el vector SFace normalizado y versionado en `PLANTILLA_BIOMETRICA`, junto con las marcaciones autorizadas. Se utiliza el esquema existente. Si ya existe una plantilla de otro tipo para el empleado, se conserva y el registro facial se rechaza.
 
-`Pruebas` es un ejecutable de .NET Framework 4.8 sin cámara ni Oracle. Compílalo en Visual Studio y ejecuta `Pruebas/bin/Debug/Pruebas.exe`. Comprueba coincidencias, rechazos, datos inválidos, cuentas inactivas y revalidación de permisos. Devuelve código 1 ante un fallo.
+El umbral inicial de antisuplantación es `0.80`. El reconocimiento usa una similitud de coseno mínima de `0.45` y exige un margen de `0.08` entre los dos mejores candidatos. La eficacia depende de la cámara, la iluminación y las condiciones de uso. El modelo antisuplantación se incorpora para evaluación académica. Consulta las fuentes y cómo preparar los archivos en [Modelos faciales](WindowsForms_Presentacion/Modelos/README.md).
+
+## Pruebas automatizadas
+
+`Pruebas` es un ejecutable de .NET Framework 4.8 que se puede ejecutar sin cámara ni Oracle. Compílalo en Visual Studio y ejecuta `Pruebas/bin/Debug/Pruebas.exe`. Cubre turnos nocturnos, marcación con contraseña, permisos y reconocimiento facial. Devuelve código 1 ante un fallo.
+
+`Scripts/Datos_Demo_Consultas.sql` carga un lote sintético de Urgencias con una guardia nocturna y marcaciones en dos días. Úsalo en una base de pruebas.
 
 ## Base de datos (Entity Framework 6 Code-First + Migraciones)
 
@@ -56,10 +69,13 @@ GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE, CREATE VIEW TO ASISTENCIA;
 
 ### 2. Cadena de conexión
 
-Editar `WindowsForms_Presentacion/App.config` (`Password` y, si aplica, `Data Source`):
+En `WindowsForms_Presentacion` crea `AssistPRO.oracle.config`. Visual Studio lo copia al directorio de salida. En una instalación, el archivo va junto al ejecutable. Completa los datos de conexión del entorno y protege el archivo con los permisos de Windows del equipo. El repositorio ignora este archivo.
 
-```
-User Id=ASISTENCIA;Password=...;Data Source=localhost:1521/XEPDB1;
+```xml
+<connectionStrings>
+    <add name="AssistProContext" providerName="Oracle.ManagedDataAccess.Client"
+         connectionString="User Id=ASISTENCIA;Password=CLAVE_LOCAL;Data Source=localhost:1521/XEPDB1;" />
+</connectionStrings>
 ```
 
 ### 3. Migraciones

@@ -34,18 +34,19 @@ namespace Logica
             this.estadoActivo = estadoActivo;
         }
 
-        public Task RegistrarAsync(SesionUsuario administrador, int idEmpleado, float[] caracteristicas)
+        public Task RegistrarAsync(SesionUsuario administrador, int idEmpleado, CapturaFacialVerificada captura)
         {
             if (administrador == null || !administrador.EsAdministrador)
                 throw new UnauthorizedAccessException("Se requiere una cuenta de administrador para registrar rostros.");
             if (idEmpleado <= 0)
                 throw new ArgumentException("Selecciona un empleado válido.", nameof(idEmpleado));
-            return repositorio.GuardarAsync(administrador, idEmpleado, PlantillaFacial.Crear(caracteristicas).Serializar());
+            var plantilla = ConsumirCaptura(captura);
+            return repositorio.GuardarAsync(administrador, idEmpleado, plantilla.Serializar());
         }
 
-        public async Task<SesionUsuario> AutenticarAsync(float[] caracteristicas)
+        public async Task<SesionUsuario> AutenticarAsync(CapturaFacialVerificada captura)
         {
-            var captura = PlantillaFacial.Crear(caracteristicas);
+            var plantillaCapturada = ConsumirCaptura(captura);
             var candidatos = await repositorio.ListarCandidatosActivosAsync().ConfigureAwait(false);
             Usuario mejorUsuario = null;
             double mejorPuntaje = double.NegativeInfinity;
@@ -57,7 +58,7 @@ namespace Logica
                 if (candidato == null || !EsUsuarioActivo(candidato.Usuario) ||
                     !PlantillaFacial.IntentarLeer(candidato.DatosPlantilla, out plantilla)) continue;
                 compatibles++;
-                double puntaje = captura.Similitud(plantilla);
+                double puntaje = plantillaCapturada.Similitud(plantilla);
                 if (puntaje > mejorPuntaje)
                 {
                     segundoPuntaje = mejorPuntaje;
@@ -78,6 +79,14 @@ namespace Logica
             var actual = await repositorio.BuscarUsuarioActivoAsync(mejorUsuario.IdUsuario).ConfigureAwait(false);
             if (!EsUsuarioActivo(actual) || actual.IdEmpleado != mejorUsuario.IdEmpleado) return null;
             return new SesionUsuario(actual);
+        }
+
+        private static PlantillaFacial ConsumirCaptura(CapturaFacialVerificada captura)
+        {
+            var plantilla = captura?.Consumir();
+            if (plantilla == null)
+                throw new InvalidOperationException("Completa una nueva prueba de vida para validar tu rostro.");
+            return plantilla;
         }
 
         private bool EsUsuarioActivo(Usuario usuario)

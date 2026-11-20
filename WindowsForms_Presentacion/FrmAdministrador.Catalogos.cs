@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Entidades;
+using Logica;
 
 namespace WindowsForms_Presentacion
 {
@@ -14,7 +15,7 @@ namespace WindowsForms_Presentacion
                 sede => new object[] { sede.IdSede, sede.NombreSede, sede.Ciudad, sede.Direccion, sede.Telefono },
                 () => AgregarSedeAsync(), editar: AgregarSedeAsync,
                 eliminar: sede => consulta.EliminarAsync<Sede>(sesion, sede.IdSede));
-            AgregarVista("Departamentos", new[] { "ID", "Departamento", "Sede" },
+            AgregarVista(ModuloUnidades, new[] { "ID", "Unidad o servicio", "Sede" },
                 consulta.ListarDepartamentosAsync,
                 departamento => new object[]
                 {
@@ -39,14 +40,14 @@ namespace WindowsForms_Presentacion
                     dispositivo.Sede?.NombreSede, dispositivo.DireccionIp, dispositivo.Ubicacion, dispositivo.Estado
                 }, () => AgregarDispositivoAsync(), editar: AgregarDispositivoAsync,
                 eliminar: dispositivo => consulta.EliminarAsync<DispositivoBiometrico>(sesion, dispositivo.IdDispositivo));
-            AgregarVista("Horarios", new[] { "ID", "Horario", "Entrada", "Salida", "Días aplicables" },
+            AgregarVista(ModuloTurnos, new[] { "ID", "Turno", "Horario", "Días de inicio" },
                 consulta.ListarHorariosAsync,
                 horario => new object[]
                 {
-                    horario.IdHorario, horario.NombreHorario, horario.HoraEntrada.ToString("HH:mm"),
-                    horario.HoraSalida.ToString("HH:mm"), horario.DiasAplicables
+                    horario.IdHorario, horario.NombreHorario, HorasTurno(horario), horario.DiasAplicables
                 }, () => AgregarHorarioAsync(), editar: AgregarHorarioAsync,
-                eliminar: horario => consulta.EliminarAsync<Horario>(sesion, horario.IdHorario));
+                eliminar: horario => consulta.EliminarAsync<Horario>(sesion, horario.IdHorario),
+                textoAgregar: "Crear turno");
             AgregarVista("Tipos de novedad", new[] { "ID", "Tipo de novedad", "Descripción" },
                 consulta.ListarTiposNovedadAsync,
                 tipo => new object[] { tipo.IdTipoNovedad, tipo.NombreTipo, tipo.Descripcion },
@@ -74,8 +75,8 @@ namespace WindowsForms_Presentacion
         {
             var sede = ElegirReferencia("Sede", await consulta.ListarSedesAsync(),
                 valor => valor.NombreSede + " · " + valor.Ciudad, valor => valor.IdSede, "Sedes").SeleccionarId(original?.IdSede);
-            var nombre = CampoRegistro.Texto("Nombre del departamento", 80).ConTexto(original?.NombreDepartamento);
-            return await GuardarRegistroAsync(original == null ? "Agregar departamento" : "Actualizar departamento", original, () => new Departamento
+            var nombre = CampoRegistro.Texto("Nombre de la unidad o servicio", 80).ConTexto(original?.NombreDepartamento);
+            return await GuardarRegistroAsync(original == null ? "Agregar unidad o servicio" : "Actualizar unidad o servicio", original, () => new Departamento
             {
                 IdDepartamento = original?.IdDepartamento ?? 0,
                 NombreDepartamento = nombre.ValorTexto,
@@ -132,18 +133,35 @@ namespace WindowsForms_Presentacion
 
         private Task<bool> AgregarHorarioAsync(Horario original = null)
         {
-            var nombre = CampoRegistro.Texto("Nombre del horario", 50).ConTexto(original?.NombreHorario);
+            var nombre = CampoRegistro.Texto("Nombre del turno", 50).ConTexto(original?.NombreHorario);
             var entrada = CampoRegistro.Hora("Hora de entrada").ConHora(original?.HoraEntrada);
-            var salida = CampoRegistro.Hora("Hora de salida").ConHora(original?.HoraSalida);
-            var dias = CampoRegistro.Texto("Días aplicables", 30).ConTexto(original?.DiasAplicables);
-            return GuardarRegistroAsync(original == null ? "Agregar horario" : "Actualizar horario", original, () => new Horario
+            var salida = CampoRegistro.Hora("Hora de salida (día siguiente si es anterior)").ConHora(original?.HoraSalida);
+            var dias = CampoRegistro.Texto("Días de inicio (ej. Lun-Vie)", 30).ConTexto(original?.DiasAplicables);
+            return GuardarRegistroAsync(original == null ? "Crear turno" : "Actualizar turno", original, () =>
             {
-                IdHorario = original?.IdHorario ?? 0,
-                NombreHorario = nombre.ValorTexto,
-                HoraEntrada = (original?.HoraEntrada.Date ?? DateTime.Today).Add(entrada.ValorHora),
-                HoraSalida = (original?.HoraSalida.Date ?? DateTime.Today).Add(salida.ValorHora),
-                DiasAplicables = dias.ValorTexto
+                bool horasCambiaron = original == null || entrada.ValorHora != original.HoraEntrada.TimeOfDay ||
+                    salida.ValorHora != original.HoraSalida.TimeOfDay;
+                if (horasCambiaron && entrada.ValorHora == salida.ValorHora)
+                    throw new ArgumentException("La entrada y la salida del turno deben tener horas distintas.");
+                if ((original == null || dias.ValorTexto != original.DiasAplicables) && !PlanificacionTurnos.DiasValidos(dias.ValorTexto))
+                    throw new ArgumentException(PlanificacionTurnos.FormatoDias);
+                DateTime hoy = PlanificacionTurnos.AhoraColombia.Date;
+                return new Horario
+                {
+                    IdHorario = original?.IdHorario ?? 0,
+                    NombreHorario = nombre.ValorTexto,
+                    HoraEntrada = (original?.HoraEntrada.Date ?? hoy).Add(entrada.ValorHora),
+                    HoraSalida = (original?.HoraSalida.Date ?? hoy).Add(salida.ValorHora),
+                    DiasAplicables = dias.ValorTexto
+                };
             }, nombre, entrada, salida, dias);
+        }
+
+        private static string HorasTurno(Horario turno)
+        {
+            if (turno == null) return string.Empty;
+            string horario = $"{turno.HoraEntrada:HH:mm}–{turno.HoraSalida:HH:mm}";
+            return PlanificacionTurnos.EsNocturno(turno) ? horario + " (+1 día)" : horario;
         }
 
         private Task<bool> AgregarTipoNovedadAsync(TipoNovedad original = null)
