@@ -13,10 +13,11 @@ namespace WindowsForms_Presentacion
 {
     internal sealed partial class FrmAdministrador : Form
     {
-        private const string ModuloPersonal = "Personal";
+        private const string ModuloPersonal = "Personal administrativo";
         private const string ModuloCuentas = "Cuentas de acceso";
         private const string ModuloUnidades = "Unidades y servicios";
         private const string ModuloTurnos = "Turnos";
+        private const string ModuloVisitantes = "Visitantes";
         private static Color Fondo => TemaAplicacion.Actual.Fondo;
         private static Color FondoLateral => TemaAplicacion.Actual.Lateral;
         private static Color TextoSecundario => TemaAplicacion.Actual.TextoSecundario;
@@ -39,7 +40,7 @@ namespace WindowsForms_Presentacion
         };
         private readonly AccesoButton filtrarAsistencia = new AccesoButton
         {
-            Text = "Filtrar personal", BackColor = SeleccionTabla, Size = new Size(154, 34), Plano = true
+            Text = "Filtrar asistencia", BackColor = SeleccionTabla, Size = new Size(154, 34), Plano = true
         };
         private readonly AccesoButton asistenciaFacial = new AccesoButton
         {
@@ -144,10 +145,10 @@ namespace WindowsForms_Presentacion
             {
                 if (evento.RowIndex >= 0) await EditarSeleccionadoAsync();
             };
-            filtrarEmpleado.Click += async (origen, evento) => await FiltrarEmpleadoAsync();
+            filtrarAsistencia.Click += async (origen, evento) => await FiltrarAsistenciaAsync();
             asistenciaFacial.Click += async (origen, evento) => await TomarAsistenciaFacialAsync();
             reenviarQr.Click += async (origen, evento) => await ReenviarQrVisitanteAsync();
-            correoVisitantes.Click += (origen, evento) => ConfigurarCorreoVisitantes();
+            correoVisitantes.Click += (origen, evento) => AbrirConfiguracionCorreoVisitantes();
             Shown += (origen, evento) =>
             {
                 AjustarAlturaModulos();
@@ -324,7 +325,7 @@ namespace WindowsForms_Presentacion
             acciones.Margin = Padding.Empty;
             agregar.Margin = editar.Margin = eliminar.Margin = new Padding(0, 0, 6, 0);
             actualizar.Margin = Padding.Empty;
-            foreach (var boton in new[] { agregar, editar, eliminar, actualizar, filtrarEmpleado, asistenciaFacial,
+            foreach (var boton in new[] { agregar, editar, eliminar, actualizar, filtrarAsistencia, asistenciaFacial,
                 reenviarQr, correoVisitantes, buscar, limpiarBusqueda })
                 boton.Font = new Font(Font.FontFamily, 10F);
             TemaAplicacion.DefinirRol(eliminar, RolTema.Error);
@@ -498,9 +499,10 @@ namespace WindowsForms_Presentacion
                 case "Desde":
                 case "Hasta":
                 case "Fecha de registro":
-                    bool tienePrimera = DateTime.TryParseExact(evento.CellValue1 as string, "dd/MM/yyyy",
+                    string formato = evento.Column.DefaultCellStyle.Format;
+                    bool tienePrimera = DateTime.TryParseExact(evento.CellValue1 as string, formato,
                         CultureInfo.CurrentCulture, DateTimeStyles.None, out DateTime primera);
-                    bool tieneSegunda = DateTime.TryParseExact(evento.CellValue2 as string, "dd/MM/yyyy",
+                    bool tieneSegunda = DateTime.TryParseExact(evento.CellValue2 as string, formato,
                         CultureInfo.CurrentCulture, DateTimeStyles.None, out DateTime segunda);
                     evento.SortResult = tienePrimera && tieneSegunda ? primera.CompareTo(segunda) : tienePrimera.CompareTo(tieneSegunda);
                     evento.Handled = true;
@@ -532,7 +534,7 @@ namespace WindowsForms_Presentacion
         {
             cargando = enCurso;
             if (IsDisposed || Disposing) return;
-            modulos.Enabled = actualizar.Enabled = filtros.Enabled = agregar.Enabled = filtrarEmpleado.Enabled = asistenciaFacial.Enabled = !enCurso;
+            modulos.Enabled = actualizar.Enabled = filtros.Enabled = agregar.Enabled = filtrarAsistencia.Enabled = asistenciaFacial.Enabled = !enCurso;
             correoVisitantes.Enabled = !enCurso;
             filtrosDashboard.Enabled = contenidoDashboard.Enabled = !enCurso;
             busqueda.Enabled = !enCurso;
@@ -546,9 +548,8 @@ namespace WindowsForms_Presentacion
             bool seleccionado = !cargando && tabla.SelectedRows.Count == 1;
             editar.Enabled = seleccionado && vista?.EditarAsync != null;
             eliminar.Enabled = seleccionado && vista?.EliminarAsync != null;
-            reenviarQr.Enabled = seleccionado && tabla.SelectedRows[0].Tag is VisitanteLocal;
-            reenviarQr.Visible = modulos.SelectedItem?.ToString() == "Visitantes" && seleccionado &&
-                tabla.SelectedRows[0].Tag is VisitanteLocal;
+            bool esVisitantes = modulos.SelectedItem?.ToString() == ModuloVisitantes;
+            reenviarQr.Enabled = esVisitantes && seleccionado && tabla.SelectedRows[0].Tag is VisitanteLocal;
         }
 
         private async Task AgregarRegistroAsync()
@@ -557,7 +558,8 @@ namespace WindowsForms_Presentacion
 
             var vista = vistas[modulos.SelectedIndex];
             if (vista.AgregarAsync == null) return;
-            await EjecutarCambioAsync(vista.AgregarAsync, "Registro guardado.");
+            string mensaje = modulos.SelectedItem?.ToString() == ModuloVisitantes ? null : "Registro guardado.";
+            await EjecutarCambioAsync(vista.AgregarAsync, mensaje);
         }
 
         private async Task EditarSeleccionadoAsync()
@@ -594,7 +596,7 @@ namespace WindowsForms_Presentacion
 
             if (IsDisposed || Disposing) return;
             if (guardado && AfectaSesion(registro)) CerrarSesionModificada();
-            else if (guardado) await CargarVistaAsync(mensaje);
+            else if (guardado) await CargarVistaAsync(mensaje ?? estado.Text);
             else estado.Text = estadoAnterior;
         }
 
@@ -669,12 +671,13 @@ namespace WindowsForms_Presentacion
             filtrosDashboard.Visible = vista.EsDashboard;
             contenidoDashboard.Visible = vista.EsDashboard;
             tabla.Visible = !vista.EsDashboard;
-            filtrarEmpleado.Visible = vista.UsaFechas;
-            asistenciaFacial.Visible = modulos.SelectedItem?.ToString() == "Personal administrativo";
+            filtrarAsistencia.Visible = vista.UsaFechas;
+            asistenciaFacial.Visible = reconocimientoHabilitado && modulos.SelectedItem?.ToString() == ModuloPersonal;
             asistenciaFacial.Width = (int)(154 * DeviceDpi / 96F);
-            correoVisitantes.Visible = modulos.SelectedItem?.ToString() == "Visitantes";
-            reenviarQr.Visible = false;
-            filtrarEmpleado.Text = idEmpleadoFiltrado.HasValue ? "Cambiar filtro" : "Filtrar personal";
+            correoVisitantes.Visible = reenviarQr.Visible = modulos.SelectedItem?.ToString() == ModuloVisitantes;
+            int totalFiltros = (idEmpleadoFiltrado.HasValue ? 1 : 0) + (idSedeFiltrada.HasValue ? 1 : 0)
+                + (idUnidadFiltrada.HasValue ? 1 : 0);
+            filtrarAsistencia.Text = totalFiltros == 0 ? "Filtrar asistencia" : $"Filtros activos ({totalFiltros})";
             agregar.Visible = vista.AgregarAsync != null;
             editar.Visible = vista.EditarAsync != null;
             eliminar.Visible = vista.EliminarAsync != null;
@@ -704,8 +707,13 @@ namespace WindowsForms_Presentacion
                     columnaTabla.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
                 }
                 else if (columna == "Fecha" || columna == "Desde" || columna == "Hasta" || columna == "Fecha de registro")
+                {
+                    bool incluyeHora = columna == "Fecha de registro" && modulos.SelectedItem?.ToString() == ModuloVisitantes;
+                    columnaTabla.DefaultCellStyle.Format = incluyeHora ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy";
                     columnaTabla.MinimumWidth = Math.Max(columnaTabla.MinimumWidth,
-                        TextRenderer.MeasureText("00/00/0000", tabla.Font).Width + tabla.DefaultCellStyle.Padding.Horizontal);
+                        TextRenderer.MeasureText(incluyeHora ? "00/00/0000 00:00" : "00/00/0000", tabla.Font).Width
+                            + tabla.DefaultCellStyle.Padding.Horizontal);
+                }
                 else if (columna == "Hora")
                     columnaTabla.MinimumWidth = Math.Max(columnaTabla.MinimumWidth,
                         TextRenderer.MeasureText("00:00:00", tabla.Font).Width + tabla.DefaultCellStyle.Padding.Horizontal);

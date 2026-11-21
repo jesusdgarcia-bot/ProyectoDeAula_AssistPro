@@ -96,7 +96,7 @@ namespace WindowsForms_Presentacion
             if (configuracion == null) throw new InvalidOperationException("Configura el correo antes de enviar invitaciones.");
             if (imagenQr == null || imagenQr.Length == 0) throw new ArgumentException("La imagen QR no es válida.", nameof(imagenQr));
 
-            var mensaje = new MailMessage
+            using (var mensaje = new MailMessage
             {
                 From = new MailAddress(configuracion.Remitente, "AssistPRO · Hospital Eduardo Arredondo Daza"),
                 Subject = "Código QR para su visita · Sede San Martín",
@@ -108,14 +108,11 @@ namespace WindowsForms_Presentacion
                 IsBodyHtml = false,
                 BodyEncoding = Encoding.UTF8,
                 SubjectEncoding = Encoding.UTF8
-            };
-            mensaje.To.Add(new MailAddress(visitante.Correo));
-            var adjunto = new Attachment(new MemoryStream(imagenQr), "Codigo-QR-Visitante.png", "image/png");
-            mensaje.Attachments.Add(adjunto);
-
-            using (mensaje)
+            })
             using (var cliente = new SmtpClient(configuracion.Servidor, configuracion.Puerto))
             {
+                mensaje.To.Add(new MailAddress(visitante.Correo));
+                mensaje.Attachments.Add(new Attachment(new MemoryStream(imagenQr), "Codigo-QR-Visitante.png", "image/png"));
                 cliente.EnableSsl = true;
                 cliente.UseDefaultCredentials = false;
                 cliente.Credentials = new NetworkCredential(configuracion.Usuario, configuracion.Clave);
@@ -123,9 +120,10 @@ namespace WindowsForms_Presentacion
                 cliente.Timeout = 20000;
                 try
                 {
-                    await cliente.SendMailAsync(mensaje).ConfigureAwait(false);
+                    // El límite de SmtpClient se aplica al envío síncrono.
+                    await Task.Run(() => cliente.Send(mensaje)).ConfigureAwait(false);
                 }
-                catch (Exception error)
+                catch (SmtpException error)
                 {
                     throw new InvalidOperationException(
                         "El registro local está guardado, pero no se pudo enviar el correo. Verifica la configuración SMTP y usa «Reenviar QR».", error);

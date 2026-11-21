@@ -52,7 +52,8 @@ namespace WindowsForms_Presentacion
             contenidoDashboard.ColumnCount = 1;
             contenidoDashboard.RowCount = 5;
             contenidoDashboard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
+            var filaIndicadores = new RowStyle(SizeType.Absolute, 98);
+            contenidoDashboard.RowStyles.Add(filaIndicadores);
             contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 224));
             contenidoDashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
@@ -66,15 +67,20 @@ namespace WindowsForms_Presentacion
             indicadores.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             for (int indice = 0; indice < valoresDashboard.Length; indice++)
                 indicadores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-            indicadores.Controls.Add(CrearIndicador(0, "Personal\nactivo hoy", RolTema.AcentoMorado), 0, 0);
-            indicadores.Controls.Add(CrearIndicador(1, "Personal con\nmarcaciones", RolTema.AcentoAzul), 1, 0);
-            indicadores.Controls.Add(CrearIndicador(2, "Marcaciones\ndel periodo", RolTema.AcentoVerde), 2, 0);
-            indicadores.Controls.Add(CrearIndicador(3, "Novedades\ndel periodo", RolTema.AcentoNaranja), 3, 0);
+            var tarjetas = new[]
+            {
+                CrearIndicador(0, "Personal\nactivo hoy", RolTema.AcentoMorado),
+                CrearIndicador(1, "Personal con\nmarcaciones", RolTema.AcentoAzul),
+                CrearIndicador(2, "Marcaciones\ndel periodo", RolTema.AcentoVerde),
+                CrearIndicador(3, "Novedades\ndel periodo", RolTema.AcentoNaranja)
+            };
+            for (int indice = 0; indice < tarjetas.Length; indice++)
+                indicadores.Controls.Add(tarjetas[indice], indice, 0);
             contenidoDashboard.Controls.Add(indicadores, 0, 0);
             contenidoDashboard.SizeChanged += (origen, evento) =>
             {
                 float escala = DeviceDpi / 96F;
-                bool dosFilas = contenidoDashboard.ClientSize.Width < 580 * escala && contenidoDashboard.ClientSize.Height >= 344 * escala;
+                bool dosFilas = contenidoDashboard.ClientSize.Width < 580 * escala && contenidoDashboard.ClientSize.Height >= 570 * escala;
                 var columnas = dosFilas ? 2 : tarjetas.Length;
                 if (indicadores.ColumnCount == columnas) return;
 
@@ -94,7 +100,7 @@ namespace WindowsForms_Presentacion
                     indicadores.SetCellPosition(tarjetas[indice], new TableLayoutPanelCellPosition(columna, indice / columnas));
                     tarjetas[indice].Margin = new Padding(0, 0, columna == columnas - 1 ? 0 : (int)(8 * escala), (int)(8 * escala));
                 }
-                filaIndicadores.Height = (dosFilas ? 186 : 103) * escala;
+                filaIndicadores.Height = (dosFilas ? 186 : 98) * escala;
                 indicadores.ResumeLayout(true);
                 contenidoDashboard.ResumeLayout(true);
             };
@@ -155,23 +161,15 @@ namespace WindowsForms_Presentacion
 
             var encabezadoDetalle = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 1,
                 Margin = new Padding(0, 0, 0, 4)
             };
             encabezadoDetalle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            encabezadoDetalle.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
             encabezadoDetalle.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tituloDetalleDashboard.Text = "Detalle del reporte";
             tituloDetalleDashboard.Dock = DockStyle.Fill;
             tituloDetalleDashboard.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
             encabezadoDetalle.Controls.Add(tituloDetalleDashboard, 0, 0);
-            var etiquetaPeriodo = new Label
-            {
-                Text = "SEDE SAN MARTÍN", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
-                Font = new Font("Segoe UI", 8F, FontStyle.Bold), Margin = Padding.Empty
-            };
-            TemaAplicacion.DefinirRol(etiquetaPeriodo, RolTema.TextoSecundario);
-            encabezadoDetalle.Controls.Add(etiquetaPeriodo, 1, 0);
             contenidoDashboard.Controls.Add(encabezadoDetalle, 0, 3);
 
             ConfigurarTabla(tablaDashboard);

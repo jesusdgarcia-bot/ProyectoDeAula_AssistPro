@@ -117,8 +117,8 @@
     <PackageReference Include="Oracle.ManagedDataAccess.EntityFramework" Version="21.23.0" />
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20261107" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20261107" />
-<PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
-<PackageReference Include="QRCoder" Version="1.9.0" /> bdd73cb0ecb5ffede5d40be4445864b3db8ba9ac
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
+    <PackageReference Include="QRCoder" Version="1.9.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Entidades\Entidades.csproj" />
@@ -135,7 +135,7 @@
     <None Include="Modelos\README.md" />
   </ItemGroup>
   <Target Name="PrepararModelosFaciales" BeforeTargets="PrepareForBuild"
-          Condition="'$(PrepararBiometriaFacial)' == 'true' And (!Exists('$(MSBuildProjectDirectory)\Modelos\face_detection_yunet_2023mar.onnx') Or !Exists('$(MSBuildProjectDirectory)\Modelos\face_recognition_sface_2021dec.onnx') Or !Exists('$(MSBuildProjectDirectory)\Modelos\anti-spoof-mn3.onnx') Or !Exists('$(MSBuildProjectDirectory)\Modelos\face_landmarker.task'))">
+          Condition="'$(PrepararBiometriaFacial)' == 'true'">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\Scripts\Preparar-ModelosFaciales.ps1&quot;" />
   </Target>
   <ItemGroup>

@@ -77,17 +77,17 @@ namespace Persistencia
             DateTime inicioVentana = ahora - VentanaDeReintento;
             DateTime primerDia = inicioVentana.Date;
             DateTime diaSiguiente = ahora.Date.AddDays(1);
-            var ultima = await contexto.RegistrosAsistencia.AsNoTracking()
+            var recientes = await contexto.RegistrosAsistencia.AsNoTracking()
                 .Where(r => r.IdEmpleado == identidad.IdEmpleado && r.Fecha >= primerDia && r.Fecha < diaSiguiente)
-                .OrderByDescending(r => r.Fecha).ThenByDescending(r => r.Hora).ThenByDescending(r => r.IdRegistro)
-                .FirstOrDefaultAsync().ConfigureAwait(false);
+                .ToListAsync().ConfigureAwait(false);
+            var ultima = recientes
+                .Select(r => new { Registro = r, Momento = r.Fecha.Date.Add(r.Hora.TimeOfDay) })
+                .Where(r => r.Momento >= inicioVentana && r.Momento <= ahora)
+                .OrderByDescending(r => r.Momento).ThenByDescending(r => r.Registro.IdRegistro)
+                .Select(r => r.Registro).FirstOrDefault();
             if (ultima != null && ultima.IdDispositivo == idDispositivo &&
                 string.Equals(ultima.TipoMarcacion?.Trim(), tipoMarcacion, StringComparison.OrdinalIgnoreCase))
-            {
-                DateTime horaAnterior = ultima.Fecha.Date.Add(ultima.Hora.TimeOfDay);
-                if (horaAnterior >= inicioVentana && horaAnterior <= ahora)
-                    return ultima;
-            }
+                return ultima;
 
             var registro = new RegistroAsistencia
             {

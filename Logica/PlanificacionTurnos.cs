@@ -31,6 +31,7 @@ namespace Logica
     public static class PlanificacionTurnos
     {
         public const string FormatoDias = "Usa días como Lun-Vie, Lun,Mié,Sáb o Todos.";
+        private static readonly Regex Espacios = new Regex(@"\s+");
         private static readonly Regex SeparadoresRango = new Regex(@"\s+(?:A|AL)\s+|\s*[-–—]\s*");
         private static readonly Regex SeparadoresDias = new Regex(@"[,;/\s]+");
         private static readonly Lazy<TimeZoneInfo> ZonaHorariaColombia = new Lazy<TimeZoneInfo>(
@@ -96,7 +97,7 @@ namespace Logica
                 if (CharUnicodeInfo.GetUnicodeCategory(caracter) != UnicodeCategory.NonSpacingMark)
                     normalizado.Append(caracter);
 
-            string dias = normalizado.ToString();
+            string dias = Espacios.Replace(normalizado.ToString(), " ");
             switch (dias)
             {
                 case "*":

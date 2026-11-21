@@ -4,7 +4,7 @@
 
 DECLARE
     v_hoy             CONSTANT DATE := TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Bogota' AS DATE));
-    v_lote            CONSTANT VARCHAR2(13) := SUBSTR(RAWTOHEX(SYS_GUID()), 1, 13);
+    v_lote            VARCHAR2(10);
     v_id_sede         ASISTENCIA.SEDE.ID_SEDE%TYPE;
     v_id_departamento ASISTENCIA.DEPARTAMENTO.ID_DEPARTAMENTO%TYPE;
     v_id_cargo        ASISTENCIA.CARGO.ID_CARGO%TYPE;
@@ -33,6 +33,7 @@ BEGIN
     INSERT INTO ASISTENCIA.SEDE (NOMBRE_SEDE, CIUDAD, DIRECCION)
     VALUES ('Hospital Demo AssistPRO', 'Valledupar', 'Direccion de prueba')
     RETURNING ID_SEDE INTO v_id_sede;
+    v_lote := TO_CHAR(v_id_sede, 'FM0000000000');
 
     INSERT INTO ASISTENCIA.DEPARTAMENTO (NOMBRE_DEPARTAMENTO, ID_SEDE)
     VALUES ('Urgencias Demo', v_id_sede)

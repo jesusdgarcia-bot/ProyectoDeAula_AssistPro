@@ -12,8 +12,11 @@ namespace WindowsForms_Presentacion
     {
         private void ConfigurarOperaciones()
         {
-            AgregarVista("Marcaciones", new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Dispositivo", "Verificación" },
-                () => consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado, textoBuscado),
+            AgregarVista("Marcaciones", new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Sede", "Unidad actual", "Dispositivo", "Verificación" },
+                () => consulta is IConsultaAsistenciaHospitalaria hospitalaria
+                    ? hospitalaria.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado,
+                        idSedeFiltrada, idUnidadFiltrada, textoBuscado)
+                    : consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado, textoBuscado),
                 registro => new object[]
                 {
                     registro.IdRegistro, NombreEmpleado(registro.Empleado), registro.Fecha.ToString("dd/MM/yyyy"),
@@ -22,8 +25,9 @@ namespace WindowsForms_Presentacion
                     string.Equals(registro.MetodoVerificacion?.Trim(), "Clave", StringComparison.OrdinalIgnoreCase)
                         ? "Contraseña" : registro.MetodoVerificacion
                 }, () => RegistrarMarcacionAsync(), usaFechas: true, editar: RegistrarMarcacionAsync,
-                eliminar: registro => consulta.EliminarAsync<RegistroAsistencia>(sesion, registro.IdRegistro));
-            AgregarVista("Personal administrativo", new[] { "ID", "Nombre", "Documento", "Área / departamento", "Cargo", "Estado" },
+                eliminar: registro => consulta.EliminarAsync<RegistroAsistencia>(sesion, registro.IdRegistro),
+                textoAgregar: "Marcación manual");
+            AgregarVista(ModuloPersonal, new[] { "ID", "Nombre", "Documento", "Área / departamento", "Cargo", "Estado" },
                 consulta.ListarEmpleadosAsync, empleado => new object[]
                 {
                     empleado.IdEmpleado, NombreEmpleado(empleado), empleado.NumeroDocumento,
@@ -36,7 +40,7 @@ namespace WindowsForms_Presentacion
                     cuenta.IdUsuario, cuenta.NombreUsuario, cuenta.Empleado, cuenta.Rol, cuenta.Estado
                 }, () => AgregarUsuarioAsync(), editar: AgregarUsuarioAsync,
                 eliminar: cuenta => consulta.EliminarAsync<Usuario>(sesion, cuenta.IdUsuario));
-            AgregarVista("Horarios asignados", new[] { "Personal", "Horario", "Desde", "Hasta" },
+            AgregarVista("Horarios asignados", new[] { "Personal", "Turno", "Horario", "Desde", "Hasta" },
                 consulta.ListarAsignacionesAsync, asignacion => new object[]
                 {
                     NombreEmpleado(asignacion.Empleado), asignacion.Horario?.NombreHorario,
@@ -58,9 +62,11 @@ namespace WindowsForms_Presentacion
                 {
                     plantilla.IdPlantilla, plantilla.Empleado, plantilla.TipoBiometria,
                     plantilla.FechaRegistro.ToString("dd/MM/yyyy")
-                }, () => RegistrarRostroAsync(), editar: RegistrarRostroAsync,
-                eliminar: plantilla => consulta.EliminarAsync<PlantillaBiometrica>(sesion, plantilla.IdPlantilla));
-            AgregarVista("Visitantes", new[] { "Nombre", "Documento / ID", "Correo", "Fecha de registro" },
+                }, reconocimientoHabilitado ? (Func<Task<bool>>)(() => RegistrarRostroAsync()) : null,
+                editar: reconocimientoHabilitado ? (Func<PlantillaAdministrada, Task<bool>>)RegistrarRostroAsync : null,
+                eliminar: plantilla => consulta.EliminarAsync<PlantillaBiometrica>(sesion, plantilla.IdPlantilla),
+                textoAgregar: "Registrar rostro");
+            AgregarVista(ModuloVisitantes, new[] { "Nombre", "Documento / ID", "Correo", "Fecha de registro" },
                 ServicioVisitantes.ListarAsync, visitante => new object[]
                 {
                     visitante.Nombre, visitante.Identificacion, visitante.Correo,
@@ -110,12 +116,31 @@ namespace WindowsForms_Presentacion
                     }
 
                     estado.Text = "Visitante guardado en este equipo. Enviando el código QR…";
-                    await ServicioVisitantes.EnviarQrAsync(visitante, configuracion, imagenQr);
-                    estado.Text = "Código QR enviado a " + visitante.Correo + ".";
+                    try
+                    {
+                        await ServicioVisitantes.EnviarQrAsync(visitante, configuracion, imagenQr);
+                        if (!IsDisposed && !Disposing) estado.Text = "Código QR enviado a " + visitante.Correo + ".";
+                    }
+                    catch (InvalidOperationException error)
+                    {
+                        if (!IsDisposed && !Disposing) estado.Text = error.Message;
+                    }
                     return true;
                 }
             }
             return false;
+        }
+
+        private void AbrirConfiguracionCorreoVisitantes()
+        {
+            try
+            {
+                ConfigurarCorreoVisitantes();
+            }
+            catch (Exception error)
+            {
+                InformarErrorOperacion(error);
+            }
         }
 
         private bool ConfigurarCorreoVisitantes()
@@ -234,12 +259,25 @@ namespace WindowsForms_Presentacion
             CambiarCarga(true);
             try
             {
-                var empleados = await consulta.ListarEmpleadosAsync();
+                var cargarEmpleados = consulta.ListarEmpleadosAsync();
+                CampoRegistro sede = null, unidad = null;
+                if (consulta is IConsultaAsistenciaHospitalaria)
+                {
+                    var cargarSedes = consulta.ListarSedesAsync();
+                    var cargarUnidades = consulta.ListarDepartamentosAsync();
+                    await Task.WhenAll(cargarEmpleados, cargarSedes, cargarUnidades);
+                    if (IsDisposed || Disposing) return;
+                    sede = CampoFiltro("Sede del dispositivo", "Todas las sedes", await cargarSedes,
+                        s => s.NombreSede, s => s.IdSede, idSedeFiltrada);
+                    unidad = CampoFiltro("Unidad actual", "Todas las unidades", await cargarUnidades,
+                        u => u.NombreDepartamento + " · " + u.Sede?.NombreSede, u => u.IdDepartamento, idUnidadFiltrada);
+                }
+                var empleados = await cargarEmpleados;
                 if (IsDisposed || Disposing) return;
-                var opciones = new[] { new { Id = 0, Nombre = "Todo el personal" } }.Concat(
-                    empleados.Select(e => new { Id = e.IdEmpleado, Nombre = NombreEmpleado(e) + " · " + e.NumeroDocumento }));
-                var empleado = CampoRegistro.Elegir("Personal", opciones, e => e.Nombre, e => e.Id);
-                using (var editor = new EditorRegistro("Filtrar personal", empleado))
+                var empleado = CampoFiltro("Empleado", "Todo el personal", empleados,
+                    DescripcionEmpleado, e => e.IdEmpleado, idEmpleadoFiltrado);
+                var campos = sede == null ? new[] { empleado } : new[] { sede, unidad, empleado };
+                using (var editor = new EditorRegistro("Filtrar asistencia", campos))
                 {
                     if (editor.ShowDialog(this) != DialogResult.OK) return;
                     idEmpleadoFiltrado = empleado.ValorId == 0 ? (int?)null : empleado.ValorId;
@@ -317,13 +355,14 @@ namespace WindowsForms_Presentacion
 
         private async Task TomarAsistenciaFacialAsync()
         {
-            if (cargando) return;
+            if (cargando || !reconocimientoHabilitado) return;
             CambiarCarga(true);
             try
             {
                 estado.Text = "Preparando el registro de asistencia…";
                 var dispositivos = (await consulta.ListarDispositivosAsync())
                     .Where(dispositivo => dispositivo.Estado?.Trim() == estadoActivo).ToList();
+                if (IsDisposed || Disposing) return;
                 if (dispositivos.Count == 0)
                     throw new InvalidOperationException("No hay dispositivos de asistencia activos. Activa un dispositivo antes de registrar marcaciones.");
 
@@ -339,15 +378,17 @@ namespace WindowsForms_Presentacion
                     estado.Text = "Verificando la identidad…";
                     var servicio = new ServicioReconocimientoFacial(
                         new Persistencia.RepositorioFacial(estadoActivo), estadoActivo);
-                    var identidad = await servicio.AutenticarAsync(captura.Caracteristicas);
+                    var identidad = await servicio.AutenticarAsync(captura.Captura);
+                    if (IsDisposed || Disposing) return;
                     if (identidad == null)
                     {
                         estado.Text = "No se pudo confirmar la identidad. No se registró asistencia.";
                         return;
                     }
 
-                    DateTime hoy = DateTime.Today;
+                    DateTime hoy = PlanificacionTurnos.AhoraColombia.Date;
                     var marcaciones = await consulta.ConsultarAsistenciaAsync(hoy, hoy, identidad.IdEmpleado);
+                    if (IsDisposed || Disposing) return;
                     string ultimaMarcacion = marcaciones.FirstOrDefault()?.TipoMarcacion?.Trim();
                     string sugerencia = string.Equals(ultimaMarcacion, "Entrada", StringComparison.OrdinalIgnoreCase)
                         ? "Salida" : "Entrada";
@@ -366,7 +407,7 @@ namespace WindowsForms_Presentacion
                     bool guardado = await GuardarRegistroAsync("Confirmar asistencia facial · " + identidad.Nombre,
                         (RegistroAsistencia)null, () =>
                         {
-                            DateTime ahora = DateTime.Now;
+                            DateTime ahora = PlanificacionTurnos.AhoraColombia;
                             return new RegistroAsistencia
                             {
                                 IdEmpleado = identidad.IdEmpleado,
@@ -378,6 +419,7 @@ namespace WindowsForms_Presentacion
                             };
                         }, tipo, dispositivo);
 
+                    if (IsDisposed || Disposing) return;
                     estado.Text = guardado
                         ? "Asistencia registrada para " + identidad.Nombre + " mediante reconocimiento facial."
                         : "Registro cancelado; no se guardó ninguna marcación.";

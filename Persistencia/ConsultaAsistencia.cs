@@ -21,12 +21,17 @@ namespace Persistencia
             if (desde >= hasta) throw new ArgumentException("El intervalo de turnos es inválido.");
 
             DateTime diaAnterior = desde.Date == DateTime.MinValue ? desde.Date : desde.Date.AddDays(-1);
+            DateTime ultimoDia = hasta == hasta.Date ? hasta.Date.AddDays(-1) : hasta.Date;
             using (var contexto = new AssistProContext())
             {
-                var asignaciones = await contexto.EmpleadosHorarios.AsNoTracking().Include(a => a.Horario)
-                    .Where(a => a.IdEmpleado == idEmpleado && a.FechaInicio < hasta &&
-                        (a.FechaFin == null || a.FechaFin >= diaAnterior))
-                    .ToListAsync().ConfigureAwait(false);
+                var consulta = contexto.EmpleadosHorarios.AsNoTracking().Include(a => a.Horario)
+                    .Where(a => a.IdEmpleado == idEmpleado && (a.FechaFin == null || a.FechaFin >= diaAnterior));
+                if (ultimoDia < DateTime.MaxValue.Date)
+                {
+                    DateTime finExclusivo = ultimoDia.AddDays(1);
+                    consulta = consulta.Where(a => a.FechaInicio < finExclusivo);
+                }
+                var asignaciones = await consulta.ToListAsync().ConfigureAwait(false);
                 return PlanificacionTurnos.EnIntervalo(asignaciones, desde, hasta);
             }
         }

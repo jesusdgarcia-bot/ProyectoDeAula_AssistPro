@@ -2,6 +2,8 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+# MSBuild puede iniciar Windows PowerShell con PSModulePath heredado de PowerShell 7.
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $carpetaModelos = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\WindowsForms_Presentacion\Modelos'))
 $revision = '48b10fa505aeb51fbd127fc60a5c660040e823b7'
@@ -35,4 +37,4 @@ foreach ($modelo in $modelos) {
         if (Test-Path -LiteralPath $temporal) { Remove-Item -LiteralPath $temporal -Force }
     }
 }
-Write-Host 'Modelos listos. Compila WindowsForms_Presentacion para copiarlos junto a la aplicación.'
+Write-Host 'Modelos listos. Compila WindowsForms_Presentacion para copiarlos al directorio de salida.'
