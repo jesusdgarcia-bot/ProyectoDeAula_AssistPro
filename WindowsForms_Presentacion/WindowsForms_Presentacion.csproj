@@ -44,6 +44,7 @@
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
   </ItemGroup>
@@ -73,6 +74,7 @@
     <Compile Include="FrmAdministrador.Operaciones.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="VisitantesLocal.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="TemaAplicacion.cs" />
     <Compile Include="SelectorDeslizante.cs">
@@ -106,6 +108,7 @@
     <PackageReference Include="Oracle.ManagedDataAccess.EntityFramework" Version="21.23.0" />
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20261107" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20261107" />
+    <PackageReference Include="QRCoder" Version="1.9.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Entidades\Entidades.csproj" />
