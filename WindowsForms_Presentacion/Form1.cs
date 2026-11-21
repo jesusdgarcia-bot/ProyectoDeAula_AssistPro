@@ -30,6 +30,8 @@ namespace WindowsForms_Presentacion
         private readonly Logica.ServicioMarcacionConClave marcacionConClave;
         private readonly bool reconocimientoHabilitado =
             bool.TryParse(ConfigurationManager.AppSettings["HabilitarBiometriaFacial"], out var habilitado) && habilitado;
+        private AccesoButton entrar;
+        private AccesoButton entrarConRostro;
         private bool autenticando;
         public Logica.SesionUsuario SesionActual { get; private set; }
         private static string EstadoActivo => ConfigurationManager.AppSettings["EstadoActivo"] ?? "A";
@@ -122,7 +124,7 @@ namespace WindowsForms_Presentacion
             PrepararError(errorClave);
             Agregar(layout, errorClave, 4, 0);
 
-            var entrar = new AccesoButton
+            entrar = new AccesoButton
             {
                 Text = "Iniciar sesión", Height = 48, Principal = true, Plano = true,
                 Font = new Font(Font.FontFamily, 11F, FontStyle.Bold)
@@ -130,6 +132,17 @@ namespace WindowsForms_Presentacion
             entrar.Click += ValidarAcceso;
             Agregar(layout, entrar, 20, 0);
             AcceptButton = entrar;
+            if (reconocimientoHabilitado)
+            {
+                entrarConRostro = new AccesoButton
+                {
+                    Text = "Entrar con reconocimiento facial", Icono = "rostro", Plano = true, Height = 44,
+                    Font = new Font(Font.FontFamily, 10, FontStyle.Bold)
+                };
+                entrarConRostro.Click += ValidarAccesoFacial;
+                Agregar(layout, entrarConRostro, 12, 0);
+            }
+
             estado.AutoSize = true;
             TemaAplicacion.DefinirRol(estado, RolTema.TextoSecundario);
             estado.AccessibleDescription = "Estado del acceso";
@@ -137,16 +150,6 @@ namespace WindowsForms_Presentacion
             estado.Font = new Font(Font.FontFamily, 10);
             estado.TextChanged += (s, e) => estado.Visible = estado.Text.Length > 0;
             Agregar(layout, estado, 10, 0);
-            if (reconocimientoHabilitado)
-            {
-                var rostro = new AccesoButton
-                {
-                    Text = "Entrar con el rostro", Icono = "rostro", Plano = true, Height = 44,
-                    Font = new Font(Font.FontFamily, 10, FontStyle.Bold)
-                };
-                rostro.Click += ValidarAccesoFacial;
-                Agregar(layout, rostro, 12, 0);
-            }
             composicion.Controls.Add(layout, 1, 0);
             scroll.Controls.Add(composicion);
             raiz.Controls.Add(scroll, 0, 1);
@@ -335,12 +338,7 @@ namespace WindowsForms_Presentacion
             if (errorUsuario.Text.Length > 0) { usuario.Focus(); return; }
             if (errorClave.Text.Length > 0) { clave.Focus(); return; }
             bool accesoAdministrador = perfilAcceso.Checked;
-            autenticando = true;
-            var boton = (Button)sender;
-            boton.Enabled = false;
-            perfilAcceso.Enabled = false;
-            usuario.ReadOnly = true;
-            clave.ReadOnly = true;
+            CambiarEstadoAcceso(true);
             estado.Text = "Verificando credenciales...";
             try
             {
@@ -362,25 +360,15 @@ namespace WindowsForms_Presentacion
             }
             finally
             {
-                autenticando = false;
-                if (!IsDisposed)
-                {
-                    boton.Enabled = true;
-                    perfilAcceso.Enabled = true;
-                    usuario.ReadOnly = false;
-                    clave.ReadOnly = false;
-                }
+                CambiarEstadoAcceso(false);
             }
         }
 
         private async void ValidarAccesoFacial(object sender, EventArgs e)
         {
             if (!reconocimientoHabilitado || autenticando || SesionActual != null) return;
-            autenticando = true;
             bool accesoAdministrador = perfilAcceso.Checked;
-            var boton = (Button)sender;
-            boton.Enabled = perfilAcceso.Enabled = false;
-            usuario.ReadOnly = clave.ReadOnly = true;
+            CambiarEstadoAcceso(true);
             errorUsuario.Text = errorClave.Text = string.Empty;
             clave.Clear();
             try
@@ -418,13 +406,17 @@ namespace WindowsForms_Presentacion
             }
             finally
             {
-                autenticando = false;
-                if (!IsDisposed)
-                {
-                    boton.Enabled = perfilAcceso.Enabled = true;
-                    usuario.ReadOnly = clave.ReadOnly = false;
-                }
+                CambiarEstadoAcceso(false);
             }
+        }
+
+        private void CambiarEstadoAcceso(bool enCurso)
+        {
+            autenticando = enCurso;
+            if (IsDisposed) return;
+            entrar.Enabled = perfilAcceso.Enabled = !enCurso;
+            if (entrarConRostro != null) entrarConRostro.Enabled = !enCurso;
+            usuario.ReadOnly = clave.ReadOnly = enCurso;
         }
 
         private void AbrirSesion(Logica.SesionUsuario sesion)

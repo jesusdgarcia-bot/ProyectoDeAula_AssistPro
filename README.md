@@ -26,23 +26,23 @@ Inicia sesión con una cuenta activa y elige el perfil correspondiente. En **Mi 
 
 ## Piloto académico de verificación facial
 
-La instalación hospitalaria se entrega con la cámara deshabilitada. El piloto usa un modelo con condiciones de investigación y educación. Antes de habilitarlo, revisa la autorización y el manejo de las plantillas con el responsable de protección de datos. La marcación con contraseña está disponible también en el piloto. [Orientación de la SIC sobre datos biométricos](https://sedeelectronica.sic.gov.co/sites/default/files/normatividad/Concepto_14-118247.pdf)
+La instalación hospitalaria se entrega con la cámara deshabilitada. Antes de habilitarla, revisa la autorización y el manejo de las plantillas con el responsable de protección de datos. La marcación con contraseña está disponible también en el piloto. [Orientación de la SIC sobre datos biométricos](https://sedeelectronica.sic.gov.co/sites/default/files/normatividad/Concepto_14-118247.pdf)
 
-En Windows x64, instala [Python 3.12 x64](https://www.python.org/downloads/windows/) y [Microsoft Visual C++ Redistributable 2015–2022 x64](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist). Desde la raíz prepara el entorno y, en la consola de desarrollador de Visual Studio, compila incluyendo los modelos.
+En Windows x64, instala Microsoft Visual C++ Redistributable 2015–2022 x64. Desde la raíz del proyecto, compila con los modelos en la consola de desarrollador de Visual Studio. [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)
 
 ```powershell
-py -3.12 -m venv .venv-mediapipe
-.\.venv-mediapipe\Scripts\python.exe -m pip install mediapipe==0.10.35
 msbuild .\ProyectoDeAula_AssistPro.slnx /p:PrepararBiometriaFacial=true
 ```
 
-Añade `HabilitarBiometriaFacial=true` como clave y valor en `AssistPRO.local.config`. Las compilaciones Debug y Release apuntan a `.venv-mediapipe`. Para usar otro intérprete, define `PythonMediaPipe` con su ruta absoluta en el mismo archivo. `CamaraFacial` controla el índice inicial de la cámara.
+Añade `HabilitarBiometriaFacial=true` como clave y valor en `AssistPRO.local.config`. `CamaraFacial` controla el índice inicial de la cámara.
 
-En **Biometría > Registrar rostro**, un administrador selecciona a una persona con cuenta activa. La persona completa la prueba de vida y se guarda su plantilla facial en Oracle. En **Mi asistencia**, quien elija **Verificar con el rostro** realiza una nueva prueba al marcar. El rostro reconocido debe corresponder a la cuenta abierta.
+En **Biometría > Registrar rostro**, un administrador selecciona a una persona con cuenta activa. La persona mira de frente a la cámara y pulsa **Registrar rostro** para guardar su plantilla facial en Oracle. Con el rostro registrado, puede elegir su perfil, pulsar **Entrar con reconocimiento facial** y después **Verificar rostro**.
 
-La prueba combina las señales de ojos y orientación de MediaPipe con el resultado del modelo antisuplantación ONNX. La secuencia y el lado del giro se eligen al azar. El video se procesa en memoria en el equipo. Oracle conserva el vector SFace normalizado y versionado en `PLANTILLA_BIOMETRICA`, junto con las marcaciones autorizadas. Se utiliza el esquema existente. Si ya existe una plantilla de otro tipo para el empleado, se conserva y el registro facial se rechaza.
+En el panel de administración, **Marcaciones > Asistencia facial** verifica el rostro y permite confirmar una entrada o salida para la persona identificada. En **Mi asistencia**, quien elija **Verificar con el rostro** realiza una nueva captura al marcar. El rostro reconocido debe corresponder a la cuenta abierta.
 
-El umbral inicial de antisuplantación es `0.80`. El reconocimiento usa una similitud de coseno mínima de `0.45` y exige un margen de `0.08` entre los dos mejores candidatos. La eficacia depende de la cámara, la iluminación y las condiciones de uso. El modelo antisuplantación se incorpora para evaluación académica. Consulta las fuentes y cómo preparar los archivos en [Modelos faciales](WindowsForms_Presentacion/Modelos/README.md).
+Cada captura toma tres muestras consecutivas de un rostro visible y obtiene un solo vector SFace. La captura directa sustituye la prueba de vida. El video se procesa en memoria en el equipo. Oracle conserva el vector normalizado y versionado en `PLANTILLA_BIOMETRICA`, junto con las marcaciones autorizadas. Si ya existe una plantilla de otro tipo para el empleado, se conserva y el registro facial se rechaza.
+
+El reconocimiento usa una similitud de coseno mínima de `0.45` y exige un margen de `0.08` entre los dos mejores candidatos. La eficacia depende de la cámara y la iluminación. [Modelos faciales](WindowsForms_Presentacion/Modelos/README.md)
 
 ## Pruebas automatizadas
 

@@ -13,6 +13,7 @@ namespace WindowsForms_Presentacion
 {
     internal sealed partial class FrmAdministrador : Form
     {
+        private const string ModuloMarcaciones = "Marcaciones";
         private const string ModuloPersonal = "Personal administrativo";
         private const string ModuloCuentas = "Cuentas de acceso";
         private const string ModuloUnidades = "Unidades y servicios";
@@ -45,7 +46,7 @@ namespace WindowsForms_Presentacion
         private readonly AccesoButton asistenciaFacial = new AccesoButton
         {
             Text = "Asistencia facial", AccessibleName = "Registrar asistencia con reconocimiento facial",
-            Principal = true, Size = new Size(154, 34), Plano = true
+            Principal = true, Size = new Size(154, 34), Plano = true, Visible = false
         };
         private readonly AccesoButton reenviarQr = new AccesoButton
         {
@@ -672,7 +673,7 @@ namespace WindowsForms_Presentacion
             contenidoDashboard.Visible = vista.EsDashboard;
             tabla.Visible = !vista.EsDashboard;
             filtrarAsistencia.Visible = vista.UsaFechas;
-            asistenciaFacial.Visible = reconocimientoHabilitado && modulos.SelectedItem?.ToString() == ModuloPersonal;
+            asistenciaFacial.Visible = reconocimientoHabilitado && modulos.SelectedItem?.ToString() == ModuloMarcaciones;
             asistenciaFacial.Width = (int)(154 * DeviceDpi / 96F);
             correoVisitantes.Visible = reenviarQr.Visible = modulos.SelectedItem?.ToString() == ModuloVisitantes;
             int totalFiltros = (idEmpleadoFiltrado.HasValue ? 1 : 0) + (idSedeFiltrada.HasValue ? 1 : 0)
@@ -722,7 +723,8 @@ namespace WindowsForms_Presentacion
             }
             if (vista.UsaFechas && desde.Value.Date > hasta.Value.Date)
             {
-                estado.Text = "La fecha inicial debe ser anterior o igual a la fecha final.";
+                const string aviso = "La fecha inicial debe ser anterior o igual a la fecha final.";
+                estado.Text = resultadoCarga == null ? aviso : resultadoCarga + " " + aviso;
                 desde.Focus();
                 return;
             }

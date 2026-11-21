@@ -21,7 +21,7 @@ namespace Logica
         }
 
         public async Task<RegistroAsistencia> RegistrarAsync(SesionUsuario sesion, int idDispositivo, string tipoMarcacion,
-            CapturaFacialVerificada captura)
+            CapturaFacial captura)
         {
             ValidarSolicitud(sesion, idDispositivo, tipoMarcacion);
 

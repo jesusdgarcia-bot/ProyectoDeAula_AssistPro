@@ -145,8 +145,9 @@ namespace Pruebas
             await Probar("Una captura inválida no consulta las plantillas", async () =>
             {
                 var repo = RepositorioCon(Candidato(1, Vector(0)));
-                var invalida = new PruebaDeVidaSimulada(new float[PlantillaFacial.Dimensiones]).Fotograma();
-                await EsperarAsync<InvalidOperationException>(() => Servicio(repo).AutenticarAsync(invalida.Captura));
+                var sesion = new SesionCapturaFacial();
+                var invalida = sesion.AgregarMuestra(new float[PlantillaFacial.Dimensiones]);
+                await EsperarAsync<InvalidOperationException>(() => Servicio(repo).AutenticarAsync(invalida));
                 Verificar(repo.Lecturas == 0 && repo.Revalidaciones == 0,
                     "La captura debe validarse antes de consultar información biométrica.");
             });
@@ -181,61 +182,57 @@ namespace Pruebas
                 Verificar(repo.Guardados == 0, "No debe escribir una plantilla sin permiso administrativo.");
             });
 
-            await Probar("La prueba exige movimiento y señales pasivas consecutivas", () =>
+            await Probar("La captura reúne y normaliza tres muestras compatibles", async () =>
             {
-                var sinMovimiento = new PruebaDeVidaSimulada(Vector(0));
-                for (int i = 0; i < 20; i++)
-                    Verificar(sinMovimiento.Fotograma().Captura == null, "Una secuencia inmóvil no debe validar presencia.");
+                var sesion = new SesionCapturaFacial();
+                var segunda = Vector(0);
+                segunda[0] = 80;
+                segunda[1] = 60;
+                Verificar(sesion.AgregarMuestra(Vector(0)) == null && sesion.Muestras == 1,
+                    "La primera muestra debe iniciar la captura.");
+                Verificar(sesion.AgregarMuestra(segunda) == null && sesion.Muestras == 2,
+                    "La segunda muestra compatible debe aumentar el contador.");
+                var captura = sesion.AgregarMuestra(Vector(0));
+                Verificar(captura != null && sesion.Muestras == 3 && sesion.AgregarMuestra(Vector(0)) == null,
+                    "La tercera muestra debe producir una sola captura.");
 
-                var sinPresencia = new PruebaDeVidaSimulada(Vector(0));
-                for (int i = 0; i < 20; i++)
-                    Verificar(sinPresencia.Fotograma(probabilidad: 0.2).Etapa == EtapaPruebaDeVida.AlinearRostro,
-                        "Las señales activas no se deben pedir con una puntuación pasiva insuficiente.");
-                return Task.CompletedTask;
+                var repo = RepositorioCon();
+                await Servicio(repo).RegistrarAsync(SesionAdministrativa(), 101, captura);
+                var vectorEsperado = Vector(0);
+                vectorEsperado[0] = 2.8f;
+                vectorEsperado[1] = 0.6f;
+                Verificar(PlantillaFacial.IntentarLeer(repo.DatosGuardados, out var plantilla) &&
+                    plantilla.Similitud(PlantillaFacial.Crear(vectorEsperado)) > 0.99999,
+                    "Cada muestra debe normalizarse antes de contribuir por igual a la plantilla.");
             });
-            await Probar("La pérdida de continuidad obliga a comenzar la prueba de vida de nuevo", () =>
+            await Probar("Un cambio de rostro reinicia el recuento de la captura", async () =>
             {
-                var prueba = new PruebaDeVidaSimulada(Vector(0));
-                var interrupciones = new Func<ResultadoPruebaDeVida>[]
-                {
-                    () => prueba.Fotograma(rostros: 0, intervaloMs: 650),
-                    () => prueba.Fotograma(rostros: 2),
-                    () => prueba.Fotograma(vector: Vector(1)),
-                    () => prueba.Fotograma(intervaloMs: 3000),
-                    () => prueba.Fotograma(intervaloMs: 0)
-                };
-                foreach (var interrumpir in interrupciones)
-                {
-                    prueba.Fotograma();
-                    prueba.Fotograma();
-                    Verificar(prueba.Fotograma().Etapa != EtapaPruebaDeVida.AlinearRostro, "La prueba debe pedir una acción.");
-                    var resultado = interrumpir();
-                    Verificar(resultado.Captura == null && resultado.Etapa == EtapaPruebaDeVida.AlinearRostro,
-                        "La prueba debe volver a alinear un solo rostro tras la interrupción.");
-                }
-                return Task.CompletedTask;
-            });
-            await Probar("La pérdida breve conserva el reto sin contar los fotogramas interrumpidos", () =>
-            {
-                var prueba = new PruebaDeVidaSimulada(Vector(0));
-                prueba.Fotograma();
-                prueba.Fotograma();
-                var etapa = prueba.Fotograma().Etapa;
-                double parpadeo = etapa == EtapaPruebaDeVida.CerrarOjos ? 0.9 : 0.1;
-                double giro = etapa == EtapaPruebaDeVida.GirarIzquierda ? 25
-                    : etapa == EtapaPruebaDeVida.GirarDerecha ? -25 : 0;
+                var captura = new SesionCapturaFacial();
+                captura.AgregarMuestra(Vector(0));
+                captura.AgregarMuestra(Vector(0));
+                Verificar(captura.AgregarMuestra(Vector(1)) == null && captura.Muestras == 1,
+                    "Un rostro diferente debe empezar una secuencia nueva.");
+                Verificar(captura.AgregarMuestra(Vector(1)) == null, "La nueva secuencia aún necesita otra muestra.");
 
-                Verificar(prueba.Fotograma(parpadeo, giro).Etapa == etapa, "La acción necesita dos fotogramas válidos.");
-                Verificar(prueba.Fotograma(rostros: 0).Etapa == etapa, "La pérdida breve debe conservar el reto.");
-                Verificar(prueba.Fotograma(parpadeo, giro).Etapa == etapa, "La acción debe volver a reunir evidencia consecutiva.");
-                Verificar(prueba.Fotograma(parpadeo, giro).Etapa != etapa, "El mismo rostro debe poder continuar el reto.");
-                prueba.Fotograma(rostros: 0);
-                var resultado = prueba.Fotograma(intervaloMs: 600);
-                Verificar(resultado.Etapa == EtapaPruebaDeVida.AlinearRostro && resultado.Captura == null,
-                    "Tras agotar el tiempo de reencuadre, recuperar el rostro debe iniciar otro intento.");
+                var repo = RepositorioCon(Candidato(1, Vector(0)), Candidato(2, Vector(1)));
+                var sesion = await Servicio(repo).AutenticarAsync(captura.AgregarMuestra(Vector(1)));
+                Verificar(sesion != null && sesion.IdUsuario == 2, "La captura final debe corresponder al nuevo rostro.");
+            });
+            await Probar("Un fotograma perdido o inválido descarta las muestras previas", () =>
+            {
+                var captura = new SesionCapturaFacial();
+                captura.AgregarMuestra(Vector(0));
+                captura.AgregarMuestra(Vector(0));
+                Verificar(captura.AgregarMuestra(new float[PlantillaFacial.Dimensiones]) == null && captura.Muestras == 0,
+                    "Una muestra inválida debe descartar la secuencia incompleta.");
+                captura.AgregarMuestra(Vector(0));
+                captura.AgregarMuestra(Vector(0));
+                captura.Reiniciar();
+                Verificar(captura.Muestras == 0 && captura.AgregarMuestra(Vector(0)) == null && captura.Muestras == 1,
+                    "Reiniciar tras perder el rostro debe iniciar el contador de nuevo.");
                 return Task.CompletedTask;
             });
-            await Probar("Una prueba aprobada solo autoriza una operación", async () =>
+            await Probar("Una captura facial solo autoriza una operación", async () =>
             {
                 var captura = CompletarCaptura(Vector(0));
                 var repo = RepositorioCon(Candidato(1, Vector(0)));
@@ -346,31 +343,14 @@ namespace Pruebas
             return vector;
         }
 
-        private static CapturaFacialVerificada CompletarCaptura(float[] vector)
+        private static CapturaFacial CompletarCaptura(float[] vector)
         {
-            var prueba = new PruebaDeVidaSimulada(vector);
-            var resultado = prueba.Fotograma();
-            for (int i = 0; i < 18 && resultado.Captura == null; i++)
-            {
-                switch (resultado.Etapa)
-                {
-                    case EtapaPruebaDeVida.CerrarOjos:
-                        resultado = prueba.Fotograma(parpadeo: 0.9);
-                        break;
-                    case EtapaPruebaDeVida.GirarIzquierda:
-                        resultado = prueba.Fotograma(giro: 25);
-                        break;
-                    case EtapaPruebaDeVida.GirarDerecha:
-                        resultado = prueba.Fotograma(giro: -25);
-                        break;
-                    default:
-                        resultado = prueba.Fotograma();
-                        break;
-                }
-            }
-            Verificar(resultado.Captura != null, "La secuencia válida debe completar la prueba.");
-            Verificar(prueba.Fotograma().Captura == null, "La prueba terminada solo debe emitir una captura.");
-            return resultado.Captura;
+            var sesion = new SesionCapturaFacial();
+            CapturaFacial captura = null;
+            for (int i = 0; i < SesionCapturaFacial.MuestrasRequeridas; i++)
+                captura = sesion.AgregarMuestra(vector);
+            Verificar(captura != null, "La secuencia válida debe completar la captura.");
+            return captura;
         }
 
         private static async Task Probar(string nombre, Func<Task> prueba)
@@ -397,26 +377,6 @@ namespace Pruebas
             try { await accion(); }
             catch (T) { return; }
             throw new Exception("Se esperaba " + typeof(T).Name + ".");
-        }
-
-        private sealed class PruebaDeVidaSimulada
-        {
-            private readonly SesionPruebaDeVida prueba = new SesionPruebaDeVida();
-            private readonly float[] rostro;
-            private int milisegundos;
-
-            public PruebaDeVidaSimulada(float[] rostro)
-            {
-                this.rostro = rostro;
-            }
-
-            public ResultadoPruebaDeVida Fotograma(double parpadeo = 0.1, double giro = 0, double probabilidad = 0.95,
-                int rostros = 1, int intervaloMs = 120, float[] vector = null)
-            {
-                milisegundos += intervaloMs;
-                return prueba.Evaluar(rostros, parpadeo, parpadeo, giro, probabilidad, vector ?? rostro,
-                    TimeSpan.FromMilliseconds(milisegundos));
-            }
         }
 
         private sealed class RepositorioMarcacionFalso : IRepositorioMarcacionFacial

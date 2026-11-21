@@ -1,6 +1,5 @@
 using System;
 using System.Configuration;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading;
@@ -26,11 +25,10 @@ namespace WindowsForms_Presentacion
         private readonly string accionCaptura;
         private CancellationTokenSource captura;
         private volatile bool solicitarCaptura;
-        private int reinicioSolicitado;
         private bool enCurso;
         private bool cerrando;
 
-        internal CapturaFacialVerificada Captura { get; private set; }
+        internal CapturaFacial Captura { get; private set; }
 
         internal FrmCapturaFacial(string titulo, bool registrar)
         {
@@ -56,7 +54,7 @@ namespace WindowsForms_Presentacion
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var instrucciones = new Label
             {
-                Text = "Coloca el rostro dentro de la imagen. Cuando se habilite el botón, inicia la prueba y sigue las instrucciones.",
+                Text = "Mira de frente a la cámara con buena iluminación. Coloca todo el rostro dentro de la imagen.",
                 Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(0, 0, 0, 12)
             };
             TemaAplicacion.DefinirRol(instrucciones, RolTema.TextoSecundario);
@@ -66,7 +64,7 @@ namespace WindowsForms_Presentacion
             layout.Controls.Add(video, 0, 1);
             estado.Text = "Preparando cámara…";
             estado.Font = new Font(Font.FontFamily, 11, FontStyle.Bold);
-            estado.AccessibleName = "Instrucciones de verificación facial";
+            estado.AccessibleName = "Estado de la captura facial";
             TemaAplicacion.DefinirRol(estado, RolTema.Superficie);
             layout.Controls.Add(estado, 0, 2);
             var acciones = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
@@ -99,10 +97,9 @@ namespace WindowsForms_Presentacion
             };
             capturar.Click += (s, e) =>
             {
-                if (solicitarCaptura) Interlocked.Exchange(ref reinicioSolicitado, 1);
-                else solicitarCaptura = true;
-                capturar.Text = "Reiniciar prueba";
-                estado.Text = "Mira de frente a la cámara con ambos ojos abiertos.";
+                solicitarCaptura = true;
+                capturar.Enabled = false;
+                estado.Text = "Mantén el rostro visible y mira de frente.";
             };
             Shown += async (s, e) => await IniciarAsync();
             FormClosing += (s, e) =>
@@ -128,26 +125,36 @@ namespace WindowsForms_Presentacion
             if (enCurso || cerrando) return;
             enCurso = true;
             solicitarCaptura = false;
-            Interlocked.Exchange(ref reinicioSolicitado, 0);
             camara.Enabled = capturar.Enabled = false;
             encender.Text = "Detener cámara";
             estado.Text = "Cargando los modelos faciales y abriendo la cámara…";
             captura = CancellationTokenSource.CreateLinkedTokenSource(cierre.Token);
+            var token = captura.Token;
             int indice = (int)camara.Value;
             bool huboError = false;
             try
             {
-                var resultado = await Task.Run(() => Capturar(indice, captura.Token));
-                if (resultado != null && !captura.IsCancellationRequested)
+                var resultado = await Task.Run(() =>
+                {
+                    if (token.IsCancellationRequested) return null;
+                    try
+                    {
+                        return Capturar(indice, token);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        return null;
+                    }
+                });
+                if (resultado != null && !token.IsCancellationRequested)
                 {
                     Captura = resultado;
-                    // La cámara se libera antes de devolver la captura verificada.
+                    // El hilo de captura ya liberó la cámara.
                     enCurso = false;
                     DialogResult = DialogResult.OK;
                     Close();
                 }
             }
-            catch (OperationCanceledException) { }
             catch (Exception error)
             {
                 huboError = true;
@@ -162,7 +169,6 @@ namespace WindowsForms_Presentacion
                 if (!IsDisposed)
                 {
                     capturar.Enabled = false;
-                    capturar.Text = accionCaptura;
                     camara.Enabled = true;
                     encender.Text = "Encender cámara";
                     video.Image?.Dispose();
@@ -174,48 +180,42 @@ namespace WindowsForms_Presentacion
             }
         }
 
-        private CapturaFacialVerificada Capturar(int indice, CancellationToken token)
+        private CapturaFacial Capturar(int indice, CancellationToken token)
         {
-            string carpetaModelos = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Modelos");
             using (var motor = new MotorReconocimientoFacial())
             using (var fuente = AbrirCamara(indice, token))
-            using (var antisuplantacion = new DetectorAntiSuplantacionOnnx())
-            using (var mediaPipe = new AnalizadorMediaPipe(ConfigurationManager.AppSettings["PythonMediaPipe"], carpetaModelos, token))
             using (var frame = new Mat())
             {
-                var prueba = new SesionPruebaDeVida();
-                var reloj = Stopwatch.StartNew();
+                var muestras = new SesionCapturaFacial();
                 int fallos = 0;
                 while (!token.IsCancellationRequested)
                 {
-                    if (Interlocked.Exchange(ref reinicioSolicitado, 0) != 0) prueba.Reiniciar();
+                    bool tomandoMuestras = solicitarCaptura;
                     if (!fuente.Read(frame) || frame.Empty())
                     {
-                        if (solicitarCaptura) prueba.Evaluar(0, 0, 0, 0, 0, null, reloj.Elapsed);
+                        muestras.Reiniciar();
                         if (++fallos >= 20)
                             throw new InvalidOperationException("La cámara no está entregando imágenes. Cierra otras aplicaciones que la usen o prueba otro número de cámara.");
                         token.WaitHandle.WaitOne(150);
                         continue;
                     }
-                    TimeSpan instante = reloj.Elapsed;
                     fallos = 0;
-                    bool verificar = solicitarCaptura;
-                    var analisis = motor.Analizar(frame, extraerCaracteristicas: verificar);
+                    var analisis = motor.Analizar(frame, extraerCaracteristicas: tomandoMuestras);
+                    if (token.IsCancellationRequested) break;
                     string mensaje = analisis.Indicacion;
-                    if (verificar)
+                    if (tomandoMuestras)
                     {
-                        var resultado = EvaluarPrueba(prueba, mediaPipe, antisuplantacion, frame, analisis, instante, token);
-                        if (resultado.Captura != null)
+                        if (analisis.Caracteristicas == null) muestras.Reiniciar();
+                        else
                         {
-                            if (Interlocked.Exchange(ref reinicioSolicitado, 0) == 0) return resultado.Captura;
-                            prueba.Reiniciar();
-                            continue;
+                            var resultado = muestras.AgregarMuestra(analisis.Caracteristicas);
+                            if (resultado != null) return resultado;
+                            mensaje = $"Mantén el rostro visible. Muestra {muestras.Muestras} de {SesionCapturaFacial.MuestrasRequeridas}…";
                         }
-                        if (analisis.RostroApto) mensaje = resultado.Indicacion;
                     }
                     else if (analisis.RostroApto)
                     {
-                        mensaje = "Pulsa «" + accionCaptura + "» para iniciar la prueba de vida.";
+                        mensaje = "Pulsa «" + accionCaptura + "» y mantén la mirada al frente.";
                     }
                     if (analisis.Rostro.HasValue)
                         Cv2.Rectangle(frame, analisis.Rostro.Value, analisis.RostroApto ? Scalar.LimeGreen : Scalar.Orange, 2);
@@ -233,12 +233,12 @@ namespace WindowsForms_Presentacion
                             var anterior = video.Image;
                             video.Image = vista;
                             anterior?.Dispose();
-                            estado.Text = mensaje;
-                            capturar.Enabled = (analisis.RostroApto || solicitarCaptura) && !token.IsCancellationRequested;
+                            if (tomandoMuestras || !solicitarCaptura) estado.Text = mensaje;
+                            capturar.Enabled = analisis.RostroApto && !solicitarCaptura && !token.IsCancellationRequested;
                         }));
                     }
                     catch { vista.Dispose(); throw; }
-                    token.WaitHandle.WaitOne(verificar ? 20 : 80);
+                    token.WaitHandle.WaitOne(160);
                 }
                 return null;
             }
@@ -263,33 +263,6 @@ namespace WindowsForms_Presentacion
                 fuente.Dispose();
             }
             throw new InvalidOperationException("No se pudo abrir la cámara. Revisa los permisos de cámara de Windows, cierra otras aplicaciones que la usen o prueba otro número de cámara.");
-        }
-
-        private static ResultadoPruebaDeVida EvaluarPrueba(SesionPruebaDeVida prueba, AnalizadorMediaPipe mediaPipe,
-            DetectorAntiSuplantacionOnnx antisuplantacion, Mat frame, ResultadoFacial rostro, TimeSpan instante, CancellationToken token)
-        {
-            if (!rostro.RostroApto || !rostro.Rostro.HasValue || rostro.Caracteristicas == null)
-                return prueba.Evaluar(rostro.CantidadRostros > 1 ? rostro.CantidadRostros : 0, 0, 0, 0, 0, null, instante);
-
-            Rect region = rostro.Rostro.Value;
-            var senales = mediaPipe.Analizar(frame, token, out bool variosRostros);
-            if (variosRostros)
-                return prueba.Evaluar(2, 0, 0, 0, 0, null, instante);
-            if (senales == null || !CorrespondeAlMismoRostro(region, senales.Rostro))
-                return prueba.Evaluar(0, 0, 0, 0, 0, null, instante);
-
-            double probabilidadReal = antisuplantacion.Evaluar(frame, region);
-            return prueba.Evaluar(1, senales.ParpadeoIzquierdo, senales.ParpadeoDerecho,
-                senales.GiroHorizontalGrados, probabilidadReal, rostro.Caracteristicas, instante);
-        }
-
-        private static bool CorrespondeAlMismoRostro(Rect deteccion, Rect malla)
-        {
-            var interseccion = deteccion & malla;
-            double areaMenor = Math.Min((double)deteccion.Width * deteccion.Height, (double)malla.Width * malla.Height);
-            return areaMenor > 0 && (double)interseccion.Width * interseccion.Height >= areaMenor * 0.75 &&
-                Math.Abs(deteccion.X + deteccion.Width / 2.0 - malla.X - malla.Width / 2.0) <= deteccion.Width * 0.25 &&
-                Math.Abs(deteccion.Y + deteccion.Height / 2.0 - malla.Y - malla.Height / 2.0) <= deteccion.Height * 0.25;
         }
 
         private static string MensajeError(Exception error)

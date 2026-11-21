@@ -12,7 +12,6 @@ namespace WindowsForms_Presentacion
         public string Indicacion { get; set; }
         // Coordenadas de la imagen original, incluso cuando se reduce para inferencia.
         public Rect? Rostro { get; set; }
-        public int CantidadRostros { get; set; }
         public bool RostroApto { get; set; }
     }
 
@@ -68,11 +67,7 @@ namespace WindowsForms_Presentacion
                 if (caras.Empty() || caras.Rows == 0)
                     return new ResultadoFacial { Indicacion = "Mira a la cámara con buena iluminación." };
                 if (caras.Rows != 1)
-                    return new ResultadoFacial
-                    {
-                        CantidadRostros = caras.Rows,
-                        Indicacion = "Debe aparecer una sola persona frente a la cámara."
-                    };
+                    return new ResultadoFacial { Indicacion = "Debe aparecer una sola persona frente a la cámara." };
 
                 float x = caras.At<float>(0, 0), y = caras.At<float>(0, 1);
                 float w = caras.At<float>(0, 2), h = caras.At<float>(0, 3);
@@ -82,7 +77,6 @@ namespace WindowsForms_Presentacion
                 int abajo = Math.Min(imagen.Height, (int)Math.Ceiling((y + h) / escala));
                 var resultado = new ResultadoFacial
                 {
-                    CantidadRostros = 1,
                     Rostro = new Rect(izquierda, arriba, Math.Max(0, derecha - izquierda), Math.Max(0, abajo - arriba))
                 };
                 if (w < 100 || h < 100)

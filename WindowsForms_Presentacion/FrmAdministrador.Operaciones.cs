@@ -12,7 +12,7 @@ namespace WindowsForms_Presentacion
     {
         private void ConfigurarOperaciones()
         {
-            AgregarVista("Marcaciones", new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Sede", "Unidad actual", "Dispositivo", "Verificación" },
+            AgregarVista(ModuloMarcaciones, new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Sede", "Unidad actual", "Dispositivo", "Verificación" },
                 () => consulta is IConsultaAsistenciaHospitalaria hospitalaria
                     ? hospitalaria.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado,
                         idSedeFiltrada, idUnidadFiltrada, textoBuscado)
@@ -356,6 +356,7 @@ namespace WindowsForms_Presentacion
         private async Task TomarAsistenciaFacialAsync()
         {
             if (cargando || !reconocimientoHabilitado) return;
+            string resultadoCarga = null;
             CambiarCarga(true);
             try
             {
@@ -420,9 +421,10 @@ namespace WindowsForms_Presentacion
                         }, tipo, dispositivo);
 
                     if (IsDisposed || Disposing) return;
-                    estado.Text = guardado
-                        ? "Asistencia registrada para " + identidad.Nombre + " mediante reconocimiento facial."
-                        : "Registro cancelado; no se guardó ninguna marcación.";
+                    if (guardado)
+                        resultadoCarga = "Asistencia registrada para " + identidad.Nombre + " mediante reconocimiento facial.";
+                    else
+                        estado.Text = "Registro cancelado; no se guardó ninguna marcación.";
                 }
             }
             catch (Exception error)
@@ -440,6 +442,8 @@ namespace WindowsForms_Presentacion
             {
                 CambiarCarga(false);
             }
+            if (resultadoCarga != null && !IsDisposed && !Disposing)
+                await CargarVistaAsync(resultadoCarga);
         }
 
         private async Task<bool> AgregarEmpleadoAsync(Empleado original = null)

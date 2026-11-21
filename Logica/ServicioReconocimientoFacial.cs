@@ -34,7 +34,7 @@ namespace Logica
             this.estadoActivo = estadoActivo;
         }
 
-        public Task RegistrarAsync(SesionUsuario administrador, int idEmpleado, CapturaFacialVerificada captura)
+        public Task RegistrarAsync(SesionUsuario administrador, int idEmpleado, CapturaFacial captura)
         {
             if (administrador == null || !administrador.EsAdministrador)
                 throw new UnauthorizedAccessException("Se requiere una cuenta de administrador para registrar rostros.");
@@ -44,7 +44,7 @@ namespace Logica
             return repositorio.GuardarAsync(administrador, idEmpleado, plantilla.Serializar());
         }
 
-        public async Task<SesionUsuario> AutenticarAsync(CapturaFacialVerificada captura)
+        public async Task<SesionUsuario> AutenticarAsync(CapturaFacial captura)
         {
             var plantillaCapturada = ConsumirCaptura(captura);
             var candidatos = await repositorio.ListarCandidatosActivosAsync().ConfigureAwait(false);
@@ -71,7 +71,7 @@ namespace Logica
                 }
             }
             if (compatibles == 0)
-                throw new InvalidOperationException("No hay rostros registrados para cuentas activas. Un administrador debe registrarlos en Plantillas.");
+                throw new InvalidOperationException("No hay rostros registrados para cuentas activas. Pide a un administrador que use Biometría > Registrar rostro.");
             if (mejorUsuario == null || mejorPuntaje < UmbralSimilitud || mejorPuntaje - segundoPuntaje < MargenMinimo)
                 return null;
 
@@ -81,11 +81,11 @@ namespace Logica
             return new SesionUsuario(actual);
         }
 
-        private static PlantillaFacial ConsumirCaptura(CapturaFacialVerificada captura)
+        private static PlantillaFacial ConsumirCaptura(CapturaFacial captura)
         {
             var plantilla = captura?.Consumir();
             if (plantilla == null)
-                throw new InvalidOperationException("Completa una nueva prueba de vida para validar tu rostro.");
+                throw new InvalidOperationException("Completa una nueva captura para validar tu rostro.");
             return plantilla;
         }
 
