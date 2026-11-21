@@ -12,11 +12,8 @@ namespace WindowsForms_Presentacion
     {
         private void ConfigurarOperaciones()
         {
-            AgregarVista("Asistencia", new[] { "ID", "Empleado", "Fecha", "Hora", "Marcación", "Sede", "Unidad actual", "Dispositivo", "Verificación" },
-                () => consulta is IConsultaAsistenciaHospitalaria hospitalaria
-                    ? hospitalaria.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado,
-                        idSedeFiltrada, idUnidadFiltrada, textoBuscado)
-                    : consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado, textoBuscado),
+            AgregarVista("Marcaciones", new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Dispositivo", "Verificación" },
+                () => consulta.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado, textoBuscado),
                 registro => new object[]
                 {
                     registro.IdRegistro, NombreEmpleado(registro.Empleado), registro.Fecha.ToString("dd/MM/yyyy"),
@@ -25,9 +22,8 @@ namespace WindowsForms_Presentacion
                     string.Equals(registro.MetodoVerificacion?.Trim(), "Clave", StringComparison.OrdinalIgnoreCase)
                         ? "Contraseña" : registro.MetodoVerificacion
                 }, () => RegistrarMarcacionAsync(), usaFechas: true, editar: RegistrarMarcacionAsync,
-                eliminar: registro => consulta.EliminarAsync<RegistroAsistencia>(sesion, registro.IdRegistro),
-                textoAgregar: "Marcación manual");
-            AgregarVista(ModuloPersonal, new[] { "ID", "Nombre", "Documento", "Unidad o servicio", "Cargo", "Estado" },
+                eliminar: registro => consulta.EliminarAsync<RegistroAsistencia>(sesion, registro.IdRegistro));
+            AgregarVista("Personal administrativo", new[] { "ID", "Nombre", "Documento", "Área / departamento", "Cargo", "Estado" },
                 consulta.ListarEmpleadosAsync, empleado => new object[]
                 {
                     empleado.IdEmpleado, NombreEmpleado(empleado), empleado.NumeroDocumento,
@@ -40,7 +36,7 @@ namespace WindowsForms_Presentacion
                     cuenta.IdUsuario, cuenta.NombreUsuario, cuenta.Empleado, cuenta.Rol, cuenta.Estado
                 }, () => AgregarUsuarioAsync(), editar: AgregarUsuarioAsync,
                 eliminar: cuenta => consulta.EliminarAsync<Usuario>(sesion, cuenta.IdUsuario));
-            AgregarVista("Asignación de turnos", new[] { "Empleado", "Turno", "Horario", "Desde", "Hasta" },
+            AgregarVista("Horarios asignados", new[] { "Personal", "Horario", "Desde", "Hasta" },
                 consulta.ListarAsignacionesAsync, asignacion => new object[]
                 {
                     NombreEmpleado(asignacion.Empleado), asignacion.Horario?.NombreHorario,
@@ -62,10 +58,137 @@ namespace WindowsForms_Presentacion
                 {
                     plantilla.IdPlantilla, plantilla.Empleado, plantilla.TipoBiometria,
                     plantilla.FechaRegistro.ToString("dd/MM/yyyy")
-                }, reconocimientoHabilitado ? (Func<Task<bool>>)(() => RegistrarRostroAsync()) : null,
-                editar: reconocimientoHabilitado ? (Func<PlantillaAdministrada, Task<bool>>)RegistrarRostroAsync : null,
-                eliminar: plantilla => consulta.EliminarAsync<PlantillaBiometrica>(sesion, plantilla.IdPlantilla),
-                textoAgregar: "Registrar rostro");
+                }, () => RegistrarRostroAsync(), editar: RegistrarRostroAsync,
+                eliminar: plantilla => consulta.EliminarAsync<PlantillaBiometrica>(sesion, plantilla.IdPlantilla));
+            AgregarVista("Visitantes", new[] { "Nombre", "Documento / ID", "Correo", "Fecha de registro" },
+                ServicioVisitantes.ListarAsync, visitante => new object[]
+                {
+                    visitante.Nombre, visitante.Identificacion, visitante.Correo,
+                    visitante.FechaRegistro.ToString("dd/MM/yyyy HH:mm")
+                }, () => AgregarVisitanteAsync());
+        }
+
+        private async Task<bool> AgregarVisitanteAsync()
+        {
+            var configuracion = ServicioVisitantes.LeerConfiguracionCorreo();
+            if (configuracion == null)
+            {
+                if (!ConfigurarCorreoVisitantes()) return false;
+                configuracion = ServicioVisitantes.LeerConfiguracionCorreo();
+                if (configuracion == null) return false;
+            }
+
+            var nombre = CampoRegistro.Texto("Nombre completo", 120);
+            var identificacion = CampoRegistro.Texto("Documento / ID", 30);
+            var correo = CampoRegistro.Texto("Correo electrónico", 160);
+            using (var editor = new EditorRegistro("Registrar visitante y enviar QR", nombre, identificacion, correo))
+            {
+                while (!IsDisposed && !Disposing && editor.ShowDialog(this) == DialogResult.OK)
+                {
+                    VisitanteLocal visitante;
+                    byte[] imagenQr;
+                    try
+                    {
+                        string direccion = correo.ValorTexto;
+                        new System.Net.Mail.MailAddress(direccion);
+                        visitante = new VisitanteLocal
+                        {
+                            Nombre = nombre.ValorTexto,
+                            Identificacion = identificacion.ValorTexto,
+                            Correo = direccion,
+                            CodigoQr = Guid.NewGuid().ToString("N"),
+                            FechaRegistro = DateTime.Now
+                        };
+                        imagenQr = ServicioVisitantes.GenerarQr(visitante);
+                        ServicioVisitantes.Guardar(visitante);
+                    }
+                    catch (Exception error) when (error is ArgumentException || error is InvalidOperationException ||
+                        error is FormatException)
+                    {
+                        MessageBox.Show(this, error.Message, "Datos del visitante", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        continue;
+                    }
+
+                    estado.Text = "Visitante guardado en este equipo. Enviando el código QR…";
+                    await ServicioVisitantes.EnviarQrAsync(visitante, configuracion, imagenQr);
+                    estado.Text = "Código QR enviado a " + visitante.Correo + ".";
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool ConfigurarCorreoVisitantes()
+        {
+            var actual = ServicioVisitantes.LeerConfiguracionCorreo();
+            var servidor = CampoRegistro.Texto("Servidor SMTP", 160).ConTexto(actual?.Servidor ?? "smtp.gmail.com");
+            var puerto = CampoRegistro.Texto("Puerto SMTP con TLS", 5).ConTexto((actual?.Puerto ?? 587).ToString());
+            var remitente = CampoRegistro.Texto("Correo remitente", 160).ConTexto(actual?.Remitente);
+            var usuario = CampoRegistro.Texto("Usuario SMTP", 160).ConTexto(actual?.Usuario);
+            var clave = CampoRegistro.Clave("Contraseña o clave de aplicación (vacía para conservar)", requerido: false);
+
+            using (var editor = new EditorRegistro("Configurar envío de correo", servidor, puerto, remitente, usuario, clave))
+            {
+                while (!IsDisposed && !Disposing && editor.ShowDialog(this) == DialogResult.OK)
+                {
+                    try
+                    {
+                        int numeroPuerto;
+                        if (!int.TryParse(puerto.ValorTexto, out numeroPuerto) || numeroPuerto < 1 || numeroPuerto > 65535)
+                            throw new ArgumentException("El puerto SMTP debe ser un número entre 1 y 65535.");
+                        string contrasena = clave.ValorTexto ?? actual?.Clave;
+                        if (string.IsNullOrWhiteSpace(contrasena))
+                            throw new ArgumentException("Escribe la contraseña SMTP o la clave de aplicación del correo.");
+                        new System.Net.Mail.MailAddress(remitente.ValorTexto);
+                        ServicioVisitantes.GuardarConfiguracionCorreo(new ConfiguracionCorreoLocal
+                        {
+                            Servidor = servidor.ValorTexto,
+                            Puerto = numeroPuerto,
+                            Remitente = remitente.ValorTexto,
+                            Usuario = usuario.ValorTexto,
+                            Clave = contrasena
+                        });
+                        MessageBox.Show(this, "La configuración de correo quedó protegida en este equipo.",
+                            "Correo de visitantes", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return true;
+                    }
+                    catch (Exception error) when (error is ArgumentException || error is InvalidOperationException ||
+                        error is FormatException)
+                    {
+                        MessageBox.Show(this, error.Message, "Configuración de correo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
+            }
+            return false;
+        }
+
+        private async Task ReenviarQrVisitanteAsync()
+        {
+            if (cargando || tabla.SelectedRows.Count != 1 || !(tabla.SelectedRows[0].Tag is VisitanteLocal visitante)) return;
+            try
+            {
+                var configuracion = ServicioVisitantes.LeerConfiguracionCorreo();
+                if (configuracion == null)
+                {
+                    if (!ConfigurarCorreoVisitantes()) return;
+                    configuracion = ServicioVisitantes.LeerConfiguracionCorreo();
+                    if (configuracion == null) return;
+                }
+                CambiarCarga(true);
+                estado.Text = "Reenviando el código QR a " + visitante.Correo + "…";
+                await ServicioVisitantes.EnviarQrAsync(visitante, configuracion);
+                estado.Text = "Código QR reenviado a " + visitante.Correo + ".";
+            }
+            catch (Exception error)
+            {
+                if (!IsDisposed && !Disposing)
+                    estado.Text = error is InvalidOperationException ? error.Message
+                        : "No se pudo reenviar el QR. Verifica la conexión y la configuración SMTP.";
+            }
+            finally
+            {
+                CambiarCarga(false);
+            }
         }
 
         private async Task<bool> RegistrarRostroAsync(PlantillaAdministrada original = null)
@@ -111,25 +234,12 @@ namespace WindowsForms_Presentacion
             CambiarCarga(true);
             try
             {
-                var cargarEmpleados = consulta.ListarEmpleadosAsync();
-                CampoRegistro sede = null, unidad = null;
-                if (consulta is IConsultaAsistenciaHospitalaria)
-                {
-                    var cargarSedes = consulta.ListarSedesAsync();
-                    var cargarUnidades = consulta.ListarDepartamentosAsync();
-                    await Task.WhenAll(cargarEmpleados, cargarSedes, cargarUnidades);
-                    if (IsDisposed || Disposing) return;
-                    sede = CampoFiltro("Sede del dispositivo", "Todas las sedes", await cargarSedes,
-                        s => s.NombreSede, s => s.IdSede, idSedeFiltrada);
-                    unidad = CampoFiltro("Unidad actual", "Todas las unidades", await cargarUnidades,
-                        u => u.NombreDepartamento + " · " + u.Sede?.NombreSede, u => u.IdDepartamento, idUnidadFiltrada);
-                }
-                var empleados = await cargarEmpleados;
+                var empleados = await consulta.ListarEmpleadosAsync();
                 if (IsDisposed || Disposing) return;
-                var empleado = CampoFiltro("Empleado", "Todo el personal", empleados,
-                    DescripcionEmpleado, e => e.IdEmpleado, idEmpleadoFiltrado);
-                var campos = sede == null ? new[] { empleado } : new[] { sede, unidad, empleado };
-                using (var editor = new EditorRegistro("Filtrar asistencia", campos))
+                var opciones = new[] { new { Id = 0, Nombre = "Todo el personal" } }.Concat(
+                    empleados.Select(e => new { Id = e.IdEmpleado, Nombre = NombreEmpleado(e) + " · " + e.NumeroDocumento }));
+                var empleado = CampoRegistro.Elegir("Personal", opciones, e => e.Nombre, e => e.Id);
+                using (var editor = new EditorRegistro("Filtrar personal", empleado))
                 {
                     if (editor.ShowDialog(this) != DialogResult.OK) return;
                     idEmpleadoFiltrado = empleado.ValorId == 0 ? (int?)null : empleado.ValorId;
@@ -205,6 +315,91 @@ namespace WindowsForms_Presentacion
             return guardado;
         }
 
+        private async Task TomarAsistenciaFacialAsync()
+        {
+            if (cargando) return;
+            CambiarCarga(true);
+            try
+            {
+                estado.Text = "Preparando el registro de asistencia…";
+                var dispositivos = (await consulta.ListarDispositivosAsync())
+                    .Where(dispositivo => dispositivo.Estado?.Trim() == estadoActivo).ToList();
+                if (dispositivos.Count == 0)
+                    throw new InvalidOperationException("No hay dispositivos de asistencia activos. Activa un dispositivo antes de registrar marcaciones.");
+
+                estado.Text = "Abriendo la cámara para identificar al empleado…";
+                using (var captura = new FrmCapturaFacial("Tomar asistencia · reconocimiento facial", registrar: false))
+                {
+                    if (captura.ShowDialog(this) != DialogResult.OK)
+                    {
+                        estado.Text = "Registro facial cancelado; no se guardó ninguna marcación.";
+                        return;
+                    }
+
+                    estado.Text = "Verificando la identidad…";
+                    var servicio = new ServicioReconocimientoFacial(
+                        new Persistencia.RepositorioFacial(estadoActivo), estadoActivo);
+                    var identidad = await servicio.AutenticarAsync(captura.Caracteristicas);
+                    if (identidad == null)
+                    {
+                        estado.Text = "No se pudo confirmar la identidad. No se registró asistencia.";
+                        return;
+                    }
+
+                    DateTime hoy = DateTime.Today;
+                    var marcaciones = await consulta.ConsultarAsistenciaAsync(hoy, hoy, identidad.IdEmpleado);
+                    string ultimaMarcacion = marcaciones.FirstOrDefault()?.TipoMarcacion?.Trim();
+                    string sugerencia = string.Equals(ultimaMarcacion, "Entrada", StringComparison.OrdinalIgnoreCase)
+                        ? "Salida" : "Entrada";
+                    var tipo = CampoRegistro.Opciones("Tipo de marcación", "Entrada", "Salida")
+                        .SeleccionarTexto(sugerencia);
+
+                    var dispositivoSugerido = dispositivos.FirstOrDefault(elemento =>
+                        elemento.Sede?.NombreSede?.IndexOf("San Mart", StringComparison.CurrentCultureIgnoreCase) >= 0)
+                        ?? (dispositivos.Count == 1 ? dispositivos[0] : null);
+                    var dispositivo = ElegirReferencia("Dispositivo", dispositivos,
+                        item => item.NombreDispositivo + " · " + item.Sede?.NombreSede,
+                        item => item.IdDispositivo, "Dispositivos")
+                        .SeleccionarId(dispositivoSugerido?.IdDispositivo);
+
+                    estado.Text = "Identidad confirmada: " + identidad.Nombre + ". Revisa y confirma la marcación.";
+                    bool guardado = await GuardarRegistroAsync("Confirmar asistencia facial · " + identidad.Nombre,
+                        (RegistroAsistencia)null, () =>
+                        {
+                            DateTime ahora = DateTime.Now;
+                            return new RegistroAsistencia
+                            {
+                                IdEmpleado = identidad.IdEmpleado,
+                                IdDispositivo = dispositivo.ValorId,
+                                Fecha = ahora.Date,
+                                Hora = ahora,
+                                TipoMarcacion = tipo.ValorTexto,
+                                MetodoVerificacion = "Facial"
+                            };
+                        }, tipo, dispositivo);
+
+                    estado.Text = guardado
+                        ? "Asistencia registrada para " + identidad.Nombre + " mediante reconocimiento facial."
+                        : "Registro cancelado; no se guardó ninguna marcación.";
+                }
+            }
+            catch (Exception error)
+            {
+                if (IsDisposed || Disposing) return;
+                if (error is UnauthorizedAccessException)
+                {
+                    InformarErrorOperacion(error);
+                    return;
+                }
+                estado.Text = error is ArgumentException || error is InvalidOperationException
+                    ? error.Message : "No se pudo completar el registro facial. Revisa la cámara y la conexión e inténtalo de nuevo.";
+            }
+            finally
+            {
+                CambiarCarga(false);
+            }
+        }
+
         private async Task<bool> AgregarEmpleadoAsync(Empleado original = null)
         {
             var departamento = ElegirReferencia("Unidad o servicio", await consulta.ListarDepartamentosAsync(),
@@ -223,7 +418,7 @@ namespace WindowsForms_Presentacion
             var estadoEmpleado = original == null ? null : CampoEstado(original.Estado);
             var campos = new List<CampoRegistro> { tipo, documento, nombres, apellidos, correo, telefono, nacimiento, ingreso, departamento, cargo };
             if (estadoEmpleado != null) campos.Add(estadoEmpleado);
-            return await GuardarRegistroAsync(original == null ? "Agregar empleado" : "Actualizar empleado", original, () =>
+            return await GuardarRegistroAsync(original == null ? "Agregar personal administrativo" : "Actualizar datos del personal", original, () =>
             {
                 if (nacimiento.ValorFechaOpcional?.Date > ingreso.ValorFecha.Date)
                     throw new ArgumentException("El nacimiento debe ser anterior o igual al ingreso.");

@@ -39,7 +39,22 @@ namespace WindowsForms_Presentacion
         };
         private readonly AccesoButton filtrarAsistencia = new AccesoButton
         {
-            Text = "Filtrar asistencia", BackColor = SeleccionTabla, Size = new Size(154, 34), Plano = true
+            Text = "Filtrar personal", BackColor = SeleccionTabla, Size = new Size(154, 34), Plano = true
+        };
+        private readonly AccesoButton asistenciaFacial = new AccesoButton
+        {
+            Text = "Asistencia facial", AccessibleName = "Registrar asistencia con reconocimiento facial",
+            Principal = true, Size = new Size(154, 34), Plano = true
+        };
+        private readonly AccesoButton reenviarQr = new AccesoButton
+        {
+            Text = "Reenviar QR", AccessibleName = "Reenviar código QR del visitante",
+            Size = new Size(112, 34), Plano = true, Visible = false
+        };
+        private readonly AccesoButton correoVisitantes = new AccesoButton
+        {
+            Text = "Configurar correo", AccessibleName = "Configurar envío de invitaciones",
+            Size = new Size(142, 34), Plano = true, Visible = false
         };
         private readonly AccesoButton editar = new AccesoButton
         {
@@ -86,7 +101,7 @@ namespace WindowsForms_Presentacion
             this.consulta = consulta;
             this.reconocimientoHabilitado = reconocimientoHabilitado;
 
-            Text = "AssistPRO | Administración hospitalaria";
+            Text = "AssistPRO | Gestión de Talento Humano · San Martín";
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Dpi;
             var area = Screen.FromPoint(Cursor.Position).WorkingArea;
@@ -129,7 +144,10 @@ namespace WindowsForms_Presentacion
             {
                 if (evento.RowIndex >= 0) await EditarSeleccionadoAsync();
             };
-            filtrarAsistencia.Click += async (origen, evento) => await FiltrarAsistenciaAsync();
+            filtrarEmpleado.Click += async (origen, evento) => await FiltrarEmpleadoAsync();
+            asistenciaFacial.Click += async (origen, evento) => await TomarAsistenciaFacialAsync();
+            reenviarQr.Click += async (origen, evento) => await ReenviarQrVisitanteAsync();
+            correoVisitantes.Click += (origen, evento) => ConfigurarCorreoVisitantes();
             Shown += (origen, evento) =>
             {
                 AjustarAlturaModulos();
@@ -306,10 +324,14 @@ namespace WindowsForms_Presentacion
             acciones.Margin = Padding.Empty;
             agregar.Margin = editar.Margin = eliminar.Margin = new Padding(0, 0, 6, 0);
             actualizar.Margin = Padding.Empty;
-            foreach (var boton in new[] { agregar, editar, eliminar, actualizar, filtrarAsistencia, buscar, limpiarBusqueda })
+            foreach (var boton in new[] { agregar, editar, eliminar, actualizar, filtrarEmpleado, asistenciaFacial,
+                reenviarQr, correoVisitantes, buscar, limpiarBusqueda })
                 boton.Font = new Font(Font.FontFamily, 10F);
             TemaAplicacion.DefinirRol(eliminar, RolTema.Error);
             acciones.Controls.Add(agregar);
+            acciones.Controls.Add(asistenciaFacial);
+            acciones.Controls.Add(reenviarQr);
+            acciones.Controls.Add(correoVisitantes);
             acciones.Controls.Add(editar);
             acciones.Controls.Add(eliminar);
             acciones.Controls.Add(actualizar);
@@ -510,7 +532,8 @@ namespace WindowsForms_Presentacion
         {
             cargando = enCurso;
             if (IsDisposed || Disposing) return;
-            modulos.Enabled = actualizar.Enabled = filtros.Enabled = agregar.Enabled = filtrarAsistencia.Enabled = !enCurso;
+            modulos.Enabled = actualizar.Enabled = filtros.Enabled = agregar.Enabled = filtrarEmpleado.Enabled = asistenciaFacial.Enabled = !enCurso;
+            correoVisitantes.Enabled = !enCurso;
             filtrosDashboard.Enabled = contenidoDashboard.Enabled = !enCurso;
             busqueda.Enabled = !enCurso;
             ActualizarAccionesSeleccion();
@@ -523,6 +546,9 @@ namespace WindowsForms_Presentacion
             bool seleccionado = !cargando && tabla.SelectedRows.Count == 1;
             editar.Enabled = seleccionado && vista?.EditarAsync != null;
             eliminar.Enabled = seleccionado && vista?.EliminarAsync != null;
+            reenviarQr.Enabled = seleccionado && tabla.SelectedRows[0].Tag is VisitanteLocal;
+            reenviarQr.Visible = modulos.SelectedItem?.ToString() == "Visitantes" && seleccionado &&
+                tabla.SelectedRows[0].Tag is VisitanteLocal;
         }
 
         private async Task AgregarRegistroAsync()
@@ -643,10 +669,12 @@ namespace WindowsForms_Presentacion
             filtrosDashboard.Visible = vista.EsDashboard;
             contenidoDashboard.Visible = vista.EsDashboard;
             tabla.Visible = !vista.EsDashboard;
-            filtrarAsistencia.Visible = vista.UsaFechas;
-            int totalFiltros = (idEmpleadoFiltrado.HasValue ? 1 : 0) + (idSedeFiltrada.HasValue ? 1 : 0)
-                + (idUnidadFiltrada.HasValue ? 1 : 0);
-            filtrarAsistencia.Text = totalFiltros == 0 ? "Filtrar asistencia" : $"Filtros activos ({totalFiltros})";
+            filtrarEmpleado.Visible = vista.UsaFechas;
+            asistenciaFacial.Visible = modulos.SelectedItem?.ToString() == "Personal administrativo";
+            asistenciaFacial.Width = (int)(154 * DeviceDpi / 96F);
+            correoVisitantes.Visible = modulos.SelectedItem?.ToString() == "Visitantes";
+            reenviarQr.Visible = false;
+            filtrarEmpleado.Text = idEmpleadoFiltrado.HasValue ? "Cambiar filtro" : "Filtrar personal";
             agregar.Visible = vista.AgregarAsync != null;
             editar.Visible = vista.EditarAsync != null;
             eliminar.Visible = vista.EliminarAsync != null;
