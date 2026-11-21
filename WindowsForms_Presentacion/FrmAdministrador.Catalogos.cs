@@ -10,7 +10,7 @@ namespace WindowsForms_Presentacion
     {
         private void ConfigurarCatalogos()
         {
-            AgregarVista("Sedes", new[] { "ID", "Sede", "Ciudad", "Dirección", "Teléfono" },
+            AgregarVista(ModuloSedes, new[] { "ID", "Sede", "Ciudad", "Dirección", "Teléfono" },
                 consulta.ListarSedesAsync,
                 sede => new object[] { sede.IdSede, sede.NombreSede, sede.Ciudad, sede.Direccion, sede.Telefono },
                 () => AgregarSedeAsync(), editar: AgregarSedeAsync,
@@ -22,24 +22,25 @@ namespace WindowsForms_Presentacion
                     departamento.IdDepartamento, departamento.NombreDepartamento, departamento.Sede?.NombreSede
                 }, () => AgregarDepartamentoAsync(), editar: AgregarDepartamentoAsync,
                 eliminar: departamento => consulta.EliminarAsync<Departamento>(sesion, departamento.IdDepartamento));
-            AgregarVista("Cargos", new[] { "ID", "Cargo", "Nivel jerárquico" },
+            AgregarVista(ModuloCargos, new[] { "ID", "Cargo", "Nivel jerárquico" },
                 consulta.ListarCargosAsync,
                 cargo => new object[] { cargo.IdCargo, cargo.NombreCargo, cargo.NivelJerarquico },
                 () => AgregarCargoAsync(), editar: AgregarCargoAsync,
                 eliminar: cargo => consulta.EliminarAsync<Cargo>(sesion, cargo.IdCargo));
-            AgregarVista("Roles", new[] { "ID", "Rol", "Descripción" },
+            AgregarVista(ModuloRoles, new[] { "ID", "Rol", "Descripción" },
                 consulta.ListarRolesAsync,
                 rol => new object[] { rol.IdRol, rol.NombreRol, rol.Descripcion },
                 () => AgregarRolAsync(), editar: AgregarRolAsync,
                 eliminar: rol => consulta.EliminarAsync<Rol>(sesion, rol.IdRol));
-            AgregarVista("Dispositivos", new[] { "ID", "Dispositivo", "Tipo", "Sede", "Dirección IP", "Ubicación", "Estado" },
+            AgregarVista(ModuloTerminales, new[] { "ID", "Terminal", "Tipo", "Sede", "Dirección IP", "Ubicación", "Estado" },
                 consulta.ListarDispositivosAsync,
                 dispositivo => new object[]
                 {
                     dispositivo.IdDispositivo, dispositivo.NombreDispositivo, dispositivo.TipoDispositivo,
                     dispositivo.Sede?.NombreSede, dispositivo.DireccionIp, dispositivo.Ubicacion, dispositivo.Estado
                 }, () => AgregarDispositivoAsync(), editar: AgregarDispositivoAsync,
-                eliminar: dispositivo => consulta.EliminarAsync<DispositivoBiometrico>(sesion, dispositivo.IdDispositivo));
+                eliminar: dispositivo => consulta.EliminarAsync<DispositivoBiometrico>(sesion, dispositivo.IdDispositivo),
+                textoAgregar: "Agregar terminal");
             AgregarVista(ModuloTurnos, new[] { "ID", "Turno", "Horario", "Días de inicio" },
                 consulta.ListarHorariosAsync,
                 horario => new object[]
@@ -48,7 +49,7 @@ namespace WindowsForms_Presentacion
                 }, () => AgregarHorarioAsync(), editar: AgregarHorarioAsync,
                 eliminar: horario => consulta.EliminarAsync<Horario>(sesion, horario.IdHorario),
                 textoAgregar: "Crear turno");
-            AgregarVista("Tipos de novedad", new[] { "ID", "Tipo de novedad", "Descripción" },
+            AgregarVista(ModuloTiposNovedad, new[] { "ID", "Tipo de novedad", "Descripción" },
                 consulta.ListarTiposNovedadAsync,
                 tipo => new object[] { tipo.IdTipoNovedad, tipo.NombreTipo, tipo.Descripcion },
                 () => AgregarTipoNovedadAsync(), editar: AgregarTipoNovedadAsync,
@@ -74,7 +75,7 @@ namespace WindowsForms_Presentacion
         private async Task<bool> AgregarDepartamentoAsync(Departamento original = null)
         {
             var sede = ElegirReferencia("Sede", await consulta.ListarSedesAsync(),
-                valor => valor.NombreSede + " · " + valor.Ciudad, valor => valor.IdSede, "Sedes").SeleccionarId(original?.IdSede);
+                valor => valor.NombreSede + " · " + valor.Ciudad, valor => valor.IdSede, ModuloSedes).SeleccionarId(original?.IdSede);
             var nombre = CampoRegistro.Texto("Nombre de la unidad o servicio", 80).ConTexto(original?.NombreDepartamento);
             return await GuardarRegistroAsync(original == null ? "Agregar unidad o servicio" : "Actualizar unidad o servicio", original, () => new Departamento
             {
@@ -111,15 +112,15 @@ namespace WindowsForms_Presentacion
         private async Task<bool> AgregarDispositivoAsync(DispositivoBiometrico original = null)
         {
             var sede = ElegirReferencia("Sede", await consulta.ListarSedesAsync(),
-                valor => valor.NombreSede + " · " + valor.Ciudad, valor => valor.IdSede, "Sedes").SeleccionarId(original?.IdSede);
-            var nombre = CampoRegistro.Texto("Nombre del dispositivo", 60).ConTexto(original?.NombreDispositivo);
-            var tipo = CampoRegistro.Texto("Tipo de dispositivo", 20).ConTexto(original?.TipoDispositivo);
+                valor => valor.NombreSede + " · " + valor.Ciudad, valor => valor.IdSede, ModuloSedes).SeleccionarId(original?.IdSede);
+            var nombre = CampoRegistro.Texto("Nombre del terminal", 60).ConTexto(original?.NombreDispositivo);
+            var tipo = CampoRegistro.Texto("Tipo de terminal", 20).ConTexto(original?.TipoDispositivo);
             var ip = CampoRegistro.Texto("Dirección IP", 15, requerido: false).ConTexto(original?.DireccionIp);
             var ubicacion = CampoRegistro.Texto("Ubicación", 80, requerido: false).ConTexto(original?.Ubicacion);
             var estadoDispositivo = original == null ? null : CampoEstado(original.Estado);
             var campos = new List<CampoRegistro> { nombre, tipo, sede, ip, ubicacion };
             if (estadoDispositivo != null) campos.Add(estadoDispositivo);
-            return await GuardarRegistroAsync(original == null ? "Agregar dispositivo" : "Actualizar dispositivo", original, () => new DispositivoBiometrico
+            return await GuardarRegistroAsync(original == null ? "Agregar terminal" : "Actualizar terminal", original, () => new DispositivoBiometrico
             {
                 IdDispositivo = original?.IdDispositivo ?? 0,
                 IdSede = sede.ValorId,

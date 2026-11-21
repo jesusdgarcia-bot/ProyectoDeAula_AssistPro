@@ -25,8 +25,7 @@ namespace WindowsForms_Presentacion
 
         private void ConfigurarDashboard()
         {
-            modulos.Items.Add("Panel de asistencia");
-            vistas.Add(new Vista { EsDashboard = true });
+            vistas.Add(ModuloDashboard, new Vista { Nombre = ModuloDashboard, EsDashboard = true });
             MostrarReporteDashboard(0);
         }
 
@@ -436,13 +435,13 @@ namespace WindowsForms_Presentacion
         {
             reporteDashboard = indice;
             tituloGraficoDashboard.Text = indice == 0 ? "Marcaciones por día"
-                : indice == 1 ? "Actividad por departamento" : "Novedades por estado";
+                : indice == 1 ? "Actividad por unidad o servicio" : "Novedades por estado";
             subtituloGraficoDashboard.Text = indice == 0 ? "Entradas y salidas en el periodo seleccionado"
                 : indice == 1 ? "Volumen de marcaciones por área · principales resultados"
                 : "Cantidad de novedades registradas según su estado";
             graficoDashboard.Invalidate();
             tituloDetalleDashboard.Text = indice == 0 ? "Detalle diario"
-                : indice == 1 ? "Detalle por departamento" : "Detalle de novedades";
+                : indice == 1 ? "Detalle por unidad o servicio" : "Detalle de novedades";
             for (int actual = 0; actual < botonesReporte.Length; actual++)
             {
                 var boton = botonesReporte[actual];

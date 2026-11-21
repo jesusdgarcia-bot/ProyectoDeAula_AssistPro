@@ -12,7 +12,7 @@ namespace WindowsForms_Presentacion
     {
         private void ConfigurarOperaciones()
         {
-            AgregarVista(ModuloMarcaciones, new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Sede", "Unidad actual", "Dispositivo", "Verificación" },
+            AgregarVista(ModuloMarcaciones, new[] { "ID", "Personal", "Fecha", "Hora", "Marcación", "Sede", "Unidad actual", "Terminal", "Verificación" },
                 () => consulta is IConsultaAsistenciaHospitalaria hospitalaria
                     ? hospitalaria.ConsultarAsistenciaAsync(desde.Value, hasta.Value, idEmpleadoFiltrado,
                         idSedeFiltrada, idUnidadFiltrada, textoBuscado)
@@ -27,20 +27,21 @@ namespace WindowsForms_Presentacion
                 }, () => RegistrarMarcacionAsync(), usaFechas: true, editar: RegistrarMarcacionAsync,
                 eliminar: registro => consulta.EliminarAsync<RegistroAsistencia>(sesion, registro.IdRegistro),
                 textoAgregar: "Marcación manual");
-            AgregarVista(ModuloPersonal, new[] { "ID", "Nombre", "Documento", "Área / departamento", "Cargo", "Estado" },
+            AgregarVista(ModuloPersonal, new[] { "ID", "Nombre", "Documento", "Unidad o servicio", "Cargo", "Estado" },
                 consulta.ListarEmpleadosAsync, empleado => new object[]
                 {
                     empleado.IdEmpleado, NombreEmpleado(empleado), empleado.NumeroDocumento,
                     empleado.Departamento?.NombreDepartamento, empleado.Cargo?.NombreCargo, empleado.Estado
                 }, () => AgregarEmpleadoAsync(), editar: AgregarEmpleadoAsync,
-                eliminar: empleado => consulta.EliminarAsync<Empleado>(sesion, empleado.IdEmpleado));
+                eliminar: empleado => consulta.EliminarAsync<Empleado>(sesion, empleado.IdEmpleado),
+                textoAgregar: "Registrar personal");
             AgregarVista(ModuloCuentas, new[] { "ID", "Usuario", "Empleado", "Rol", "Estado" },
                 consulta.ListarUsuariosAsync, cuenta => new object[]
                 {
                     cuenta.IdUsuario, cuenta.NombreUsuario, cuenta.Empleado, cuenta.Rol, cuenta.Estado
                 }, () => AgregarUsuarioAsync(), editar: AgregarUsuarioAsync,
                 eliminar: cuenta => consulta.EliminarAsync<Usuario>(sesion, cuenta.IdUsuario));
-            AgregarVista("Horarios asignados", new[] { "Personal", "Turno", "Horario", "Desde", "Hasta" },
+            AgregarVista(ModuloAsignaciones, new[] { "Personal", "Turno", "Horario", "Desde", "Hasta" },
                 consulta.ListarAsignacionesAsync, asignacion => new object[]
                 {
                     NombreEmpleado(asignacion.Empleado), asignacion.Horario?.NombreHorario,
@@ -49,7 +50,7 @@ namespace WindowsForms_Presentacion
                 }, () => AsignarHorarioAsync(), editar: AsignarHorarioAsync,
                 eliminar: asignacion => consulta.EliminarAsync<EmpleadoHorario>(sesion, asignacion.IdEmpleadoHorario),
                 textoAgregar: "Asignar turno");
-            AgregarVista("Novedades", new[] { "Empleado", "Tipo", "Desde", "Hasta", "Estado", "Motivo" },
+            AgregarVista(ModuloNovedades, new[] { "Personal", "Tipo", "Desde", "Hasta", "Estado", "Motivo" },
                 consulta.ListarNovedadesAsync, novedad => new object[]
                 {
                     NombreEmpleado(novedad.Empleado), novedad.TipoNovedad?.NombreTipo,
@@ -57,7 +58,7 @@ namespace WindowsForms_Presentacion
                     novedad.EstadoAprobacion, novedad.Motivo
                 }, () => AgregarNovedadAsync(), editar: AgregarNovedadAsync,
                 eliminar: novedad => consulta.EliminarAsync<Novedad>(sesion, novedad.IdNovedad));
-            AgregarVista("Biometría", new[] { "ID", "Empleado", "Biometría", "Fecha de registro" },
+            AgregarVista(ModuloBiometria, new[] { "ID", "Personal", "Biometría", "Fecha de registro" },
                 consulta.ListarPlantillasAsync, plantilla => new object[]
                 {
                     plantilla.IdPlantilla, plantilla.Empleado, plantilla.TipoBiometria,
@@ -267,7 +268,7 @@ namespace WindowsForms_Presentacion
                     var cargarUnidades = consulta.ListarDepartamentosAsync();
                     await Task.WhenAll(cargarEmpleados, cargarSedes, cargarUnidades);
                     if (IsDisposed || Disposing) return;
-                    sede = CampoFiltro("Sede del dispositivo", "Todas las sedes", await cargarSedes,
+                    sede = CampoFiltro("Sede del terminal", "Todas las sedes", await cargarSedes,
                         s => s.NombreSede, s => s.IdSede, idSedeFiltrada);
                     unidad = CampoFiltro("Unidad actual", "Todas las unidades", await cargarUnidades,
                         u => u.NombreDepartamento + " · " + u.Sede?.NombreSede, u => u.IdDepartamento, idUnidadFiltrada);
@@ -312,8 +313,8 @@ namespace WindowsForms_Presentacion
             var empleados = await consulta.ListarEmpleadosAsync();
             var dispositivos = await consulta.ListarDispositivosAsync();
             var empleado = ElegirEmpleado(empleados).SeleccionarId(original?.IdEmpleado);
-            var dispositivo = ElegirReferencia("Dispositivo y sede", dispositivos,
-                d => d.NombreDispositivo + " · " + d.Sede?.NombreSede, d => d.IdDispositivo, "Dispositivos")
+            var dispositivo = ElegirReferencia("Terminal y sede", dispositivos,
+                d => d.NombreDispositivo + " · " + d.Sede?.NombreSede, d => d.IdDispositivo, ModuloTerminales)
                 .SeleccionarId(original?.IdDispositivo);
             var fecha = CampoRegistro.Fecha("Fecha de la marcación").ConFecha(original?.Fecha);
             var hora = CampoRegistro.Hora("Hora real de entrada o salida").ConHora(original?.Hora);
@@ -365,7 +366,7 @@ namespace WindowsForms_Presentacion
                     .Where(dispositivo => dispositivo.Estado?.Trim() == estadoActivo).ToList();
                 if (IsDisposed || Disposing) return;
                 if (dispositivos.Count == 0)
-                    throw new InvalidOperationException("No hay dispositivos de asistencia activos. Activa un dispositivo antes de registrar marcaciones.");
+                    throw new InvalidOperationException($"Activa un terminal en «{ModuloTerminales}» antes de registrar marcaciones.");
 
                 estado.Text = "Abriendo la cámara para identificar al empleado…";
                 using (var captura = new FrmCapturaFacial("Tomar asistencia · reconocimiento facial", registrar: false))
@@ -399,9 +400,9 @@ namespace WindowsForms_Presentacion
                     var dispositivoSugerido = dispositivos.FirstOrDefault(elemento =>
                         elemento.Sede?.NombreSede?.IndexOf("San Mart", StringComparison.CurrentCultureIgnoreCase) >= 0)
                         ?? (dispositivos.Count == 1 ? dispositivos[0] : null);
-                    var dispositivo = ElegirReferencia("Dispositivo", dispositivos,
+                    var dispositivo = ElegirReferencia("Terminal y sede", dispositivos,
                         item => item.NombreDispositivo + " · " + item.Sede?.NombreSede,
-                        item => item.IdDispositivo, "Dispositivos")
+                        item => item.IdDispositivo, ModuloTerminales)
                         .SeleccionarId(dispositivoSugerido?.IdDispositivo);
 
                     estado.Text = "Identidad confirmada: " + identidad.Nombre + ". Revisa y confirma la marcación.";
@@ -452,7 +453,7 @@ namespace WindowsForms_Presentacion
                 d => d.NombreDepartamento + " · " + d.Sede?.NombreSede, d => d.IdDepartamento, ModuloUnidades)
                 .SeleccionarId(original?.IdDepartamento);
             var cargo = ElegirReferencia("Cargo", await consulta.ListarCargosAsync(),
-                c => c.NombreCargo, c => c.IdCargo, "Cargos").SeleccionarId(original?.IdCargo);
+                c => c.NombreCargo, c => c.IdCargo, ModuloCargos).SeleccionarId(original?.IdCargo);
             var tipo = CampoRegistro.Texto("Tipo de documento", 2).ConTexto(original?.TipoDocumento);
             var documento = CampoRegistro.Texto("Número de documento", 20).ConTexto(original?.NumeroDocumento);
             var nombres = CampoRegistro.Texto("Nombres", 60).ConTexto(original?.Nombres);
@@ -464,7 +465,7 @@ namespace WindowsForms_Presentacion
             var estadoEmpleado = original == null ? null : CampoEstado(original.Estado);
             var campos = new List<CampoRegistro> { tipo, documento, nombres, apellidos, correo, telefono, nacimiento, ingreso, departamento, cargo };
             if (estadoEmpleado != null) campos.Add(estadoEmpleado);
-            return await GuardarRegistroAsync(original == null ? "Agregar personal administrativo" : "Actualizar datos del personal", original, () =>
+            return await GuardarRegistroAsync(original == null ? "Registrar personal" : "Actualizar datos del personal", original, () =>
             {
                 if (nacimiento.ValorFechaOpcional?.Date > ingreso.ValorFecha.Date)
                     throw new ArgumentException("El nacimiento debe ser anterior o igual al ingreso.");
@@ -497,7 +498,7 @@ namespace WindowsForms_Presentacion
             if (disponibles.Count == 0)
                 throw new InvalidOperationException("Registra un empleado activo que todavía no tenga cuenta.");
             var empleado = ElegirEmpleado(disponibles).SeleccionarId(original?.IdEmpleado);
-            var rol = ElegirReferencia("Rol", await consulta.ListarRolesAsync(), r => r.NombreRol, r => r.IdRol, "Roles")
+            var rol = ElegirReferencia("Rol", await consulta.ListarRolesAsync(), r => r.NombreRol, r => r.IdRol, ModuloRoles)
                 .SeleccionarId(original?.IdRol);
             var usuario = CampoRegistro.Texto("Nombre de usuario", 30).ConTexto(original?.NombreUsuario);
             var correo = CampoRegistro.Texto("Correo de acceso", 100).ConTexto(original?.CorreoAcceso);
@@ -545,7 +546,7 @@ namespace WindowsForms_Presentacion
         {
             var empleado = ElegirEmpleado(await consulta.ListarEmpleadosAsync()).SeleccionarId(original?.IdEmpleado);
             var tipo = ElegirReferencia("Tipo de novedad", await consulta.ListarTiposNovedadAsync(),
-                t => t.NombreTipo, t => t.IdTipoNovedad, "Tipos de novedad").SeleccionarId(original?.IdTipoNovedad);
+                t => t.NombreTipo, t => t.IdTipoNovedad, ModuloTiposNovedad).SeleccionarId(original?.IdTipoNovedad);
             var inicio = CampoRegistro.Fecha("Desde").ConFecha(original?.FechaInicio);
             var fin = CampoRegistro.Fecha("Hasta", opcional: true).ConFecha(original?.FechaFin);
             var motivo = CampoRegistro.Texto("Motivo laboral (sin datos clínicos)", 200, requerido: false).ConTexto(original?.Motivo);

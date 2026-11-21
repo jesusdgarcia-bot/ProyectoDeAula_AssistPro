@@ -11,7 +11,7 @@ Inicia sesión con una cuenta activa y elige el perfil correspondiente. En **Mi 
 
 ## Configuración y operación hospitalaria
 
-1. Registra las **Sedes**, las **Unidades y servicios** y los **Cargos** antes de agregar el personal y crear sus cuentas. En **Dispositivos**, asocia cada terminal de asistencia con la sede donde opera.
+1. En **Organización interna**, registra **Sedes**, **Unidades y servicios** y **Cargos** antes de registrar al **Personal** y crear sus cuentas. En **Terminales de asistencia**, asocia cada terminal con la sede donde opera.
 2. Guarda el ID del terminal en `WindowsForms_Presentacion/AssistPRO.local.config` y recompila. En un equipo instalado, colócalo junto al ejecutable y reinicia AssistPRO. Las instalaciones anteriores pueden seguir usando `IdDispositivoFacial` como identificador del terminal.
 
    ```xml
@@ -22,7 +22,7 @@ Inicia sesión con una cuenta activa y elige el perfil correspondiente. En **Mi 
 
 3. Define los **Turnos** y sus días de inicio, por ejemplo `Lun-Vie`, `Lun,Mié,Sáb` o `Todos`. Una salida anterior a la hora de entrada corresponde al día siguiente. Una guardia de 19:00 a 07:00 que empieza el último día de la asignación sigue vigente hasta las 07:00 del día posterior. Registra la vigencia en **Asignación de turnos**.
 4. En **Mi asistencia**, pulsa **Marcar entrada** o **Marcar salida** y confirma con la contraseña de la cuenta abierta. Puedes conservar puesto tu equipo de protección. Oracle usa la hora de Colombia y guarda cada marcación en su fecha real. Si una guardia cruza medianoche, la entrada y la salida pueden aparecer en fechas distintas. Se pueden registrar guardias extraordinarias aunque no haya un turno programado.
-5. En **Asistencia**, filtra por personal, sede del terminal y unidad o servicio actual del personal. El resumen por día agrupa por fecha calendario. Si alguien no pudo marcar, indica al administrador la fecha, la hora y el terminal para que use **Marcación manual** o corrija el registro cuando haya conexión. Las novedades son laborales y se describen sin incluir información de pacientes.
+5. En **Marcaciones**, filtra por personal, sede del terminal y unidad o servicio actual del personal. El **Dashboard** agrupa las marcaciones diarias por fecha calendario. Si alguien no pudo marcar, indica al administrador la fecha, la hora y el terminal para que use **Marcación manual** o corrija el registro cuando haya conexión. Las novedades son laborales y se describen sin incluir información de pacientes.
 
 ## Piloto académico de verificación facial
 
