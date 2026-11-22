@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -33,9 +34,8 @@ namespace WindowsForms_Presentacion
         private static Color FondoTabla => TemaAplicacion.Actual.Superficie;
         private static Color EncabezadoTabla => TemaAplicacion.Actual.EncabezadoTabla;
         private static Color SeleccionTabla => TemaAplicacion.Actual.SeleccionTabla;
-        private readonly Dictionary<string, Vista> vistas = new Dictionary<string, Vista>();
-        private readonly TableLayoutPanel modulos = new TableLayoutPanel();
-        private Vista vistaActual;
+        private readonly ListBox modulos = new ListBox();
+        private Vista VistaActual => modulos.SelectedItem as Vista;
         private readonly DataGridView tabla = new DataGridView();
         private readonly FlowLayoutPanel filtros = new FlowLayoutPanel();
         private readonly DateTimePicker desde = new DateTimePicker();
@@ -89,6 +89,8 @@ namespace WindowsForms_Presentacion
         private readonly AccesoButton buscar = new AccesoButton { Text = "Buscar", Size = new Size(80, 34), Plano = true };
         private readonly AccesoButton limpiarBusqueda = new AccesoButton { Text = "Limpiar", Size = new Size(82, 34), Plano = true };
         private bool ajustandoHerramientas;
+        private readonly int primerCatalogo;
+        private int moduloBajoCursor = -1;
         private string textoBuscado = string.Empty;
         private int? idEmpleadoFiltrado;
         private int? idSedeFiltrada;
@@ -124,13 +126,14 @@ namespace WindowsForms_Presentacion
             ConstruirInterfaz(sesion);
             ConfigurarDashboard();
             ConfigurarOperaciones();
+            primerCatalogo = modulos.Items.Count;
             ConfigurarCatalogos();
-            var dashboard = AgregarOpcionModulo(ModuloDashboard);
-            AgregarGrupoModulos("Talento humano", ModuloPersonal, ModuloMarcaciones, ModuloTurnos,
-                ModuloAsignaciones, ModuloNovedades, ModuloTiposNovedad);
-            AgregarGrupoModulos("Organización interna", ModuloSedes, ModuloUnidades, ModuloCargos, ModuloTerminales);
-            AgregarGrupoModulos("Acceso y recepción", ModuloCuentas, ModuloRoles, ModuloBiometria, ModuloVisitantes);
 
+            modulos.SelectedIndexChanged += async (origen, evento) =>
+            {
+                buscarTexto.Clear();
+                await CargarVistaAsync();
+            };
             actualizar.Click += async (origen, evento) => await CargarVistaAsync();
             agregar.Click += async (origen, evento) => await AgregarRegistroAsync();
             editar.Click += async (origen, evento) => await EditarSeleccionadoAsync();
@@ -156,7 +159,11 @@ namespace WindowsForms_Presentacion
             asistenciaFacial.Click += async (origen, evento) => await TomarAsistenciaFacialAsync();
             reenviarQr.Click += async (origen, evento) => await ReenviarQrVisitanteAsync();
             correoVisitantes.Click += (origen, evento) => AbrirConfiguracionCorreoVisitantes();
-            Shown += (origen, evento) => dashboard.Checked = true;
+            Shown += (origen, evento) =>
+            {
+                AjustarAlturaModulos();
+                modulos.SelectedIndex = 0;
+            };
             TemaAplicacion.Registrar(this);
         }
 
@@ -188,17 +195,22 @@ namespace WindowsForms_Presentacion
             var marca = TemaAplicacion.CrearMarca();
             marca.Margin = new Padding(0, 0, 0, 8);
             panel.Controls.Add(marca, 0, 0);
-            var navegacion = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Margin = Padding.Empty };
-            modulos.Dock = DockStyle.Top;
-            modulos.AutoSize = true;
-            modulos.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            modulos.ColumnCount = 1;
-            modulos.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            modulos.Dock = DockStyle.Fill;
+            modulos.BorderStyle = BorderStyle.None;
+            modulos.BackColor = FondoLateral;
+            modulos.ForeColor = TextoSecundario;
             TemaAplicacion.DefinirRol(modulos, RolTema.Lateral);
             modulos.AccessibleName = "Secciones del panel de administración";
             modulos.Margin = Padding.Empty;
-            navegacion.Controls.Add(modulos);
-            panel.Controls.Add(navegacion, 0, 1);
+            modulos.DisplayMember = nameof(Vista.Nombre);
+            modulos.IntegralHeight = false;
+            modulos.DrawMode = DrawMode.OwnerDrawFixed;
+            modulos.ItemHeight = Font.Height + 14;
+            modulos.DrawItem += DibujarModulo;
+            modulos.MouseMove += (origen, evento) => MarcarModuloBajoCursor(modulos.IndexFromPoint(evento.Location));
+            modulos.MouseLeave += (origen, evento) => MarcarModuloBajoCursor(-1);
+            modulos.Resize += (origen, evento) => AjustarAlturaModulos();
+            panel.Controls.Add(modulos, 0, 1);
             panel.Controls.Add(new Label
             {
                 Text = sesion.Nombre, Dock = DockStyle.Fill, AutoEllipsis = true, UseMnemonic = false,
@@ -220,47 +232,61 @@ namespace WindowsForms_Presentacion
             return panel;
         }
 
-        private void AgregarGrupoModulos(string nombre, params string[] secciones)
+        private void AjustarAlturaModulos()
         {
-            var encabezado = new Label
-            {
-                Text = nombre, Dock = DockStyle.Fill, AutoSize = true, UseMnemonic = false,
-                Font = new Font(Font.FontFamily, 9, FontStyle.Bold), Margin = new Padding(9, 10, 0, 4)
-            };
-            TemaAplicacion.DefinirRol(encabezado, RolTema.TextoSecundario);
-            AgregarFilaMenu(encabezado);
-            foreach (string seccion in secciones)
-                AgregarOpcionModulo(seccion);
+            if (modulos.Items.Count == 0 || modulos.Height <= 0) return;
+            int ideal = Font.Height + (int)(16 * DeviceDpi / 96F);
+            int altura = Math.Max(Font.Height + 4, Math.Min(ideal, modulos.Height / modulos.Items.Count));
+            if (modulos.ItemHeight != altura) modulos.ItemHeight = altura;
         }
 
-        private RadioButton AgregarOpcionModulo(string nombre)
+        private void MarcarModuloBajoCursor(int indice)
         {
-            var vista = vistas[nombre];
-            var opcion = new RadioButton
-            {
-                Text = vista.Nombre, Appearance = Appearance.Button, FlatStyle = FlatStyle.Flat,
-                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true,
-                Height = Font.Height + 10, UseMnemonic = false, Cursor = Cursors.Hand,
-                Padding = new Padding(9, 0, 4, 0), Margin = new Padding(0, 0, 0, 2)
-            };
-            opcion.FlatAppearance.BorderSize = 0;
-            TemaAplicacion.DefinirRol(opcion, RolTema.Lateral);
-            opcion.CheckedChanged += async (origen, evento) =>
-            {
-                if (!opcion.Checked) return;
-                vistaActual = vista;
-                buscarTexto.Clear();
-                await CargarVistaAsync();
-            };
-            AgregarFilaMenu(opcion);
-            return opcion;
+            if (moduloBajoCursor == indice) return;
+            int anterior = moduloBajoCursor;
+            moduloBajoCursor = indice;
+            if (anterior >= 0) modulos.Invalidate(modulos.GetItemRectangle(anterior));
+            if (indice >= 0) modulos.Invalidate(modulos.GetItemRectangle(indice));
         }
 
-        private void AgregarFilaMenu(Control control)
+        private void DibujarModulo(object origen, DrawItemEventArgs evento)
         {
-            int fila = modulos.RowCount++;
-            modulos.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            modulos.Controls.Add(control, 0, fila);
+            if (evento.Index < 0) return;
+            var tema = TemaAplicacion.Actual;
+            bool seleccionado = (evento.State & DrawItemState.Selected) != 0;
+            using (var fondo = new SolidBrush(FondoLateral))
+                evento.Graphics.FillRectangle(fondo, evento.Bounds);
+            float escala = DeviceDpi / 96F;
+            int margenVertical = Math.Max(1, (int)(2 * escala));
+            var rectangulo = Rectangle.Inflate(evento.Bounds, -1, -margenVertical);
+            if (evento.Index == primerCatalogo)
+            {
+                using (var linea = new Pen(tema.LineaTabla))
+                    evento.Graphics.DrawLine(linea, rectangulo.Left + 5, evento.Bounds.Top,
+                        rectangulo.Right - 5, evento.Bounds.Top);
+            }
+            if (seleccionado || modulos.Enabled && evento.Index == moduloBajoCursor)
+            {
+                var estadoGrafico = evento.Graphics.Save();
+                evento.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var contorno = DibujoAcceso.Redondeado(rectangulo, 7 * escala))
+                using (var fondo = new SolidBrush(seleccionado ? tema.SeleccionTabla : tema.AlternanciaTabla))
+                    evento.Graphics.FillPath(fondo, contorno);
+                if (seleccionado)
+                {
+                    int altura = Math.Max(1, rectangulo.Height - (int)(12 * escala));
+                    using (var acento = new SolidBrush(tema.AcentoMorado))
+                        evento.Graphics.FillRectangle(acento, rectangulo.Left + (int)(4 * escala),
+                            rectangulo.Top + (rectangulo.Height - altura) / 2, Math.Max(2, (int)(3 * escala)), altura);
+                }
+                evento.Graphics.Restore(estadoGrafico);
+            }
+            TextRenderer.DrawText(evento.Graphics, modulos.GetItemText(modulos.Items[evento.Index]), modulos.Font,
+                Rectangle.Inflate(rectangulo, -(int)(13 * escala), 0), seleccionado ? tema.TextoSeleccionTabla : TextoSecundario,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            if ((evento.State & DrawItemState.Focus) != 0)
+                ControlPaint.DrawFocusRectangle(evento.Graphics, Rectangle.Inflate(rectangulo, -4, -4),
+                    tema.BordeFoco, FondoLateral);
         }
 
         private Control CrearContenido()
@@ -499,7 +525,7 @@ namespace WindowsForms_Presentacion
             Func<T, object[]> valores, Func<Task<bool>> crear = null, bool usaFechas = false,
             Func<T, Task<bool>> editar = null, Func<T, Task> eliminar = null, string textoAgregar = "Agregar")
         {
-            vistas.Add(nombre, new Vista
+            modulos.Items.Add(new Vista
             {
                 Nombre = nombre,
                 Columnas = columnas,
@@ -529,16 +555,17 @@ namespace WindowsForms_Presentacion
         private void ActualizarAccionesSeleccion()
         {
             if (IsDisposed || Disposing) return;
+            var vista = VistaActual;
             bool seleccionado = !cargando && tabla.SelectedRows.Count == 1;
-            editar.Enabled = seleccionado && vistaActual?.EditarAsync != null;
-            eliminar.Enabled = seleccionado && vistaActual?.EliminarAsync != null;
-            bool esVisitantes = vistaActual?.Nombre == ModuloVisitantes;
+            editar.Enabled = seleccionado && vista?.EditarAsync != null;
+            eliminar.Enabled = seleccionado && vista?.EliminarAsync != null;
+            bool esVisitantes = vista?.Nombre == ModuloVisitantes;
             reenviarQr.Enabled = esVisitantes && seleccionado && tabla.SelectedRows[0].Tag is VisitanteLocal;
         }
 
         private async Task AgregarRegistroAsync()
         {
-            var vista = vistaActual;
+            var vista = VistaActual;
             if (cargando || vista?.AgregarAsync == null) return;
             string mensaje = vista.Nombre == ModuloVisitantes ? null : "Registro guardado.";
             await EjecutarCambioAsync(vista.AgregarAsync, mensaje);
@@ -546,7 +573,7 @@ namespace WindowsForms_Presentacion
 
         private async Task EditarSeleccionadoAsync()
         {
-            var vista = vistaActual;
+            var vista = VistaActual;
             if (cargando || vista?.EditarAsync == null || tabla.SelectedRows.Count != 1) return;
             object registro = tabla.SelectedRows[0].Tag;
             await EjecutarCambioAsync(() => vista.EditarAsync(registro), "Registro actualizado.", registro);
@@ -583,7 +610,7 @@ namespace WindowsForms_Presentacion
 
         private async Task EliminarSeleccionadoAsync()
         {
-            var vista = vistaActual;
+            var vista = VistaActual;
             if (cargando || vista?.EliminarAsync == null || tabla.SelectedRows.Count != 1) return;
             var fila = tabla.SelectedRows[0];
             object registro = fila.Tag;
@@ -643,7 +670,7 @@ namespace WindowsForms_Presentacion
 
         private async Task CargarVistaAsync(string resultadoCarga = null)
         {
-            var vista = vistaActual;
+            var vista = VistaActual;
             if (cargando || vista == null) return;
 
             titulo.Text = vista.Nombre;
@@ -754,7 +781,7 @@ namespace WindowsForms_Presentacion
 
         private sealed class Vista
         {
-            internal string Nombre { get; set; }
+            public string Nombre { get; set; }
             internal string[] Columnas { get; set; }
             internal bool UsaFechas { get; set; }
             internal bool EsDashboard { get; set; }

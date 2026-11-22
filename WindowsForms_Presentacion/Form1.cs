@@ -201,21 +201,15 @@ namespace WindowsForms_Presentacion
         {
             var encabezado = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
                 Padding = new Padding(28, 16, 28, 16), Margin = Padding.Empty
             };
-            encabezado.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
             encabezado.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             encabezado.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
             encabezado.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            encabezado.Controls.Add(new MarcaAcceso { Dock = DockStyle.Fill, Margin = new Padding(0, 3, 8, 3) }, 0, 0);
-            var nombre = Texto("AssistPRO", 18, RolTema.Normal, FontStyle.Bold);
-            nombre.Dock = DockStyle.Fill;
-            nombre.TextAlign = ContentAlignment.MiddleLeft;
-            nombre.Margin = Padding.Empty;
-            encabezado.Controls.Add(nombre, 1, 0);
+            encabezado.Controls.Add(TemaAplicacion.CrearMarca(), 0, 0);
             var tema = TemaAplicacion.CrearSelectorTema();
-            encabezado.Controls.Add(tema, 2, 0);
+            encabezado.Controls.Add(tema, 1, 0);
             return encabezado;
         }
 
@@ -690,26 +684,80 @@ namespace WindowsForms_Presentacion
         public MarcaAcceso()
         {
             SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            SetStyle(ControlStyles.Selectable, false);
             BackColor = Color.Transparent;
             DoubleBuffered = true;
             ResizeRedraw = true;
-            Font = new Font("Segoe UI", 18F, FontStyle.Bold);
+            TabStop = false;
+            Font = new Font("Segoe UI Semibold", 17F);
             AccessibleName = "AssistPRO";
             AccessibleRole = AccessibleRole.Graphic;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            int lado = Math.Min(Width, Height) - 2;
+            base.OnPaint(e);
+            float escala = DeviceDpi / 96F;
+            int lado = Math.Min((int)(36 * escala), Math.Min(Width, Height));
             if (lado <= 0) return;
-            var limites = new Rectangle((Width - lado) / 2, (Height - lado) / 2, lado, lado);
+
             var paleta = TemaAplicacion.Actual;
-            using (var contorno = DibujoAcceso.Redondeado(limites, 8))
-            using (var fondo = new SolidBrush(paleta.PrimarioFin))
-                e.Graphics.FillPath(fondo, contorno);
-            TextRenderer.DrawText(e.Graphics, "A", Font, limites, paleta.TextoPrimario,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            DibujarEmblema(e.Graphics, new RectangleF(0, (Height - lado) / 2F, lado, lado), paleta);
+            int inicioNombre = lado + (int)(9 * escala);
+            if (inicioNombre < Width)
+                DibujarNombre(e.Graphics, new Rectangle(inicioNombre, 0, Width - inicioNombre, Height), Font, paleta);
+        }
+
+        private static void DibujarEmblema(Graphics grafico, RectangleF limites, PaletaTema paleta)
+        {
+            const float unidad = 64F;
+            var estado = grafico.Save();
+            grafico.TranslateTransform(limites.X, limites.Y);
+            grafico.ScaleTransform(limites.Width / unidad, limites.Height / unidad);
+            grafico.SmoothingMode = SmoothingMode.AntiAlias;
+
+            var fondoEmblema = new RectangleF(1, 1, 62, 62);
+            using (var contorno = DibujoAcceso.Redondeado(fondoEmblema, 16))
+            using (var fondo = new LinearGradientBrush(fondoEmblema, paleta.PrimarioInicio, paleta.PrimarioFin, 50F))
+            using (var borde = new Pen(Color.FromArgb(85, paleta.TextoPrimario), 1.2F))
+            {
+                grafico.FillPath(fondo, contorno);
+                grafico.DrawPath(borde, contorno);
+            }
+
+            using (var monograma = new Pen(paleta.TextoPrimario, 5.4F)
+            {
+                StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round
+            })
+            {
+                grafico.DrawLines(monograma, new[] { new PointF(17, 47), new PointF(31, 17), new PointF(36, 28) });
+                grafico.DrawLine(monograma, 42, 40.5F, 45, 47);
+            }
+
+            using (var verificacion = new Pen(Color.FromArgb(168, 250, 230), 5.4F)
+            {
+                StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round
+            })
+            {
+                grafico.DrawLines(verificacion, new[] { new PointF(26.5F, 34), new PointF(32.5F, 40), new PointF(48, 24.5F) });
+            }
+
+            grafico.Restore(estado);
+        }
+
+        private static void DibujarNombre(Graphics grafico, Rectangle limites, Font fuente, PaletaTema paleta)
+        {
+            const TextFormatFlags formato = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix
+                | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
+            int anchoAssist = TextRenderer.MeasureText(grafico, "Assist", fuente,
+                new Size(int.MaxValue, limites.Height), formato).Width;
+            TextRenderer.DrawText(grafico, "Assist", fuente, limites, paleta.Texto, formato);
+            if (anchoAssist < limites.Width)
+            {
+                limites.X += anchoAssist;
+                limites.Width -= anchoAssist;
+                TextRenderer.DrawText(grafico, "PRO", fuente, limites, paleta.AcentoMorado, formato);
+            }
         }
     }
 

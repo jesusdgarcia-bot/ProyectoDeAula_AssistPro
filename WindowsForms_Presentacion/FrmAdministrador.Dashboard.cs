@@ -25,7 +25,7 @@ namespace WindowsForms_Presentacion
 
         private void ConfigurarDashboard()
         {
-            vistas.Add(ModuloDashboard, new Vista { Nombre = ModuloDashboard, EsDashboard = true });
+            modulos.Items.Add(new Vista { Nombre = ModuloDashboard, EsDashboard = true });
             MostrarReporteDashboard(0);
         }
 

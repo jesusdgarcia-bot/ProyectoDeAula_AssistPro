@@ -124,21 +124,7 @@ namespace WindowsForms_Presentacion
 
         internal static Control CrearMarca()
         {
-            var marca = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
-                Margin = Padding.Empty
-            };
-            marca.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
-            marca.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            marca.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            marca.Controls.Add(new MarcaAcceso { Dock = DockStyle.Fill, Margin = new Padding(0, 2, 8, 2) }, 0, 0);
-            marca.Controls.Add(new Label
-            {
-                Text = "AssistPRO", Dock = DockStyle.Fill, Margin = Padding.Empty,
-                TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 17, FontStyle.Bold)
-            }, 1, 0);
-            return marca;
+            return new MarcaAcceso { Dock = DockStyle.Fill, Margin = Padding.Empty };
         }
 
         internal static SelectorDeslizante CrearSelectorTema()

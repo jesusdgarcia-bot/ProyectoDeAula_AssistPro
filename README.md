@@ -11,7 +11,7 @@ Inicia sesión con una cuenta activa y elige el perfil correspondiente. En **Mi 
 
 ## Configuración y operación hospitalaria
 
-1. En **Organización interna**, registra **Sedes**, **Unidades y servicios** y **Cargos** antes de registrar al **Personal** y crear sus cuentas. En **Terminales de asistencia**, asocia cada terminal con la sede donde opera.
+1. Configura **Sedes**, **Unidades y servicios** y **Cargos** antes de registrar al **Personal** y crear sus cuentas. En **Terminales de asistencia**, asocia cada terminal con la sede donde opera.
 2. Guarda el ID del terminal en `WindowsForms_Presentacion/AssistPRO.local.config` y recompila. En un equipo instalado, colócalo junto al ejecutable y reinicia AssistPRO. Las instalaciones anteriores pueden seguir usando `IdDispositivoFacial` como identificador del terminal.
 
    ```xml
