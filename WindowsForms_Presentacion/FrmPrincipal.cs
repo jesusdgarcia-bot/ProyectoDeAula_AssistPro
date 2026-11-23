@@ -11,6 +11,7 @@ namespace WindowsForms_Presentacion
 {
     public sealed class FrmPrincipal : Form
     {
+        private static readonly Font FuenteEstadoNovedad = new Font("Segoe UI", 9F, FontStyle.Bold);
         private readonly SesionUsuario sesion;
         private readonly IConsultaAsistencia consulta;
         private readonly ServicioMarcacionFacial marcacionFacial;
@@ -21,6 +22,24 @@ namespace WindowsForms_Presentacion
         private readonly DateTimePicker hasta = new DateTimePicker();
         private readonly DataGridView registros = new DataGridView();
         private readonly Label estado = new Label();
+        private readonly AccesoButton botonAsistencia = new AccesoButton { Text = "Mi asistencia", Principal = true, Plano = true, Dock = DockStyle.Fill };
+        private readonly AccesoButton botonHorarios = new AccesoButton { Text = "Mis horarios", Plano = true, Dock = DockStyle.Fill };
+        private readonly AccesoButton botonNovedades = new AccesoButton { Text = "Mis reportes", AccessibleName = "Quejas y novedades", Plano = true, Dock = DockStyle.Fill };
+        private readonly DataGridView tablaHorarios = new DataGridView();
+        private readonly Label estadoHorarios = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+        private readonly AccesoButton actualizarHorarios = new AccesoButton { Text = "Actualizar", Plano = true, Height = 40 };
+        private readonly ComboBox tipoNovedad = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+        private readonly DateTimePicker fechaNovedad = new DateTimePicker { Format = DateTimePickerFormat.Short, Dock = DockStyle.Fill };
+        private readonly DateTimePicker fechaFinNovedad = new DateTimePicker { Format = DateTimePickerFormat.Short, ShowCheckBox = true, Dock = DockStyle.Fill };
+        private readonly TextBox motivoNovedad = new TextBox { Multiline = true, MaxLength = 200, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill };
+        private readonly DataGridView tablaNovedades = new DataGridView();
+        private readonly Label estadoNovedades = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+        private readonly Label contadorNovedad = new Label { Text = "0 / 200", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight };
+        private readonly AccesoButton enviarNovedad = new AccesoButton { Text = "Enviar al administrador", Principal = true, Plano = true, Height = 40 };
+        private readonly AccesoButton actualizarNovedades = new AccesoButton { Text = "Actualizar", Plano = true, Height = 40 };
+        private Control paginaAsistencia;
+        private Control paginaHorarios;
+        private Control paginaNovedades;
         private readonly AccesoButton buscar = new AccesoButton();
         private readonly Label estadoMarcacion = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
         private readonly Label estadoTurno = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
@@ -55,6 +74,8 @@ namespace WindowsForms_Presentacion
             WindowState = FormWindowState.Maximized;
             AutoScaleMode = AutoScaleMode.Dpi;
             Font = new Font("Segoe UI", 11);
+            fechaNovedad.Value = PlanificacionTurnos.AhoraColombia.Date;
+            fechaFinNovedad.Value = PlanificacionTurnos.AhoraColombia.Date;
             CrearInterfaz();
             Shown += async (sender, args) => await CargarAsync();
             FormClosing += (sender, args) =>
@@ -71,26 +92,32 @@ namespace WindowsForms_Presentacion
             raiz.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             var lateral = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5,
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8,
                 Padding = new Padding(16, 24, 16, 16), Margin = Padding.Empty
             };
             TemaAplicacion.DefinirRol(lateral, RolTema.Lateral);
             lateral.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+            lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             lateral.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             lateral.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             lateral.Controls.Add(TemaAplicacion.CrearMarca(), 0, 0);
+            lateral.Controls.Add(botonAsistencia, 0, 1);
+            lateral.Controls.Add(botonHorarios, 0, 2);
+            lateral.Controls.Add(botonNovedades, 0, 3);
             var identidad = Etiqueta(sesion.Nombre + Environment.NewLine + sesion.Rol, 10);
             identidad.AutoEllipsis = true;
             identidad.UseMnemonic = false;
-            lateral.Controls.Add(identidad, 0, 2);
+            lateral.Controls.Add(identidad, 0, 5);
             var tema = TemaAplicacion.CrearSelectorTema();
-            lateral.Controls.Add(tema, 0, 3);
+            lateral.Controls.Add(tema, 0, 6);
             var salir = new AccesoButton { Text = "Cerrar sesión", Dock = DockStyle.Fill, Plano = true };
             salir.Click += (sender, args) => Close();
-            lateral.Controls.Add(salir, 0, 4);
+            lateral.Controls.Add(salir, 0, 7);
 
             var contenido = new TableLayoutPanel
             {
@@ -173,9 +200,391 @@ namespace WindowsForms_Presentacion
             estado.AccessibleDescription = "Estado de la consulta";
             estado.AutoEllipsis = true;
             contenido.Controls.Add(estado, 0, 5);
+            paginaAsistencia = contenido;
+            paginaAsistencia.Dock = DockStyle.Fill;
+            paginaHorarios = CrearPaginaHorarios();
+            paginaHorarios.Dock = DockStyle.Fill;
+            paginaNovedades = CrearPaginaNovedades();
+            paginaNovedades.Dock = DockStyle.Fill;
+            var paginas = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+            paginas.Controls.Add(paginaNovedades);
+            paginas.Controls.Add(paginaHorarios);
+            paginas.Controls.Add(paginaAsistencia);
+            paginaAsistencia.BringToFront();
+            botonAsistencia.Click += (sender, args) => MostrarPaginaAsistencia();
+            botonHorarios.Click += async (sender, args) =>
+            {
+                MostrarPaginaHorarios();
+                await CargarHorariosAsync();
+            };
+            botonNovedades.Click += async (sender, args) =>
+            {
+                MostrarPaginaNovedades();
+                await CargarNovedadesAsync();
+            };
+            enviarNovedad.Click += async (sender, args) => await EnviarNovedadAsync();
+            actualizarNovedades.Click += async (sender, args) => await CargarNovedadesAsync();
+            actualizarHorarios.Click += async (sender, args) => await CargarHorariosAsync();
+            motivoNovedad.TextChanged += (sender, args) =>
+            {
+                contadorNovedad.Text = motivoNovedad.TextLength + " / 200";
+                contadorNovedad.ForeColor = motivoNovedad.TextLength >= 190
+                    ? TemaAplicacion.Actual.AcentoNaranja : TemaAplicacion.Actual.TextoSecundario;
+            };
             raiz.Controls.Add(lateral, 0, 0);
-            raiz.Controls.Add(contenido, 1, 0);
+            raiz.Controls.Add(paginas, 1, 0);
             Controls.Add(raiz);
+        }
+
+        private Control CrearPaginaHorarios()
+        {
+            var contenido = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
+                Padding = new Padding(24), Margin = Padding.Empty
+            };
+            contenido.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            TemaAplicacion.DefinirRol(contenido, RolTema.Superficie);
+
+            contenido.Controls.Add(Etiqueta("Mis horarios", 25, FontStyle.Bold), 0, 0);
+            var descripcion = Etiqueta("Consulta los turnos que tienes asignados para los próximos 30 días.", 10);
+            TemaAplicacion.DefinirRol(descripcion, RolTema.TextoSecundario);
+            contenido.Controls.Add(descripcion, 0, 1);
+
+            tablaHorarios.Dock = DockStyle.Fill;
+            tablaHorarios.ReadOnly = true;
+            tablaHorarios.AllowUserToAddRows = false;
+            tablaHorarios.AllowUserToDeleteRows = false;
+            tablaHorarios.AllowUserToResizeRows = false;
+            tablaHorarios.AutoGenerateColumns = false;
+            tablaHorarios.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            tablaHorarios.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            tablaHorarios.RowHeadersVisible = false;
+            tablaHorarios.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            tablaHorarios.MultiSelect = false;
+            tablaHorarios.BorderStyle = BorderStyle.None;
+            tablaHorarios.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            tablaHorarios.EnableHeadersVisualStyles = false;
+            tablaHorarios.ColumnHeadersDefaultCellStyle.Padding = new Padding(8);
+            tablaHorarios.DefaultCellStyle.Padding = new Padding(8);
+            tablaHorarios.RowTemplate.Height = 40;
+            tablaHorarios.AccessibleName = "Turnos asignados para el empleado";
+            AgregarColumnaHorario("Día", nameof(TurnoProgramado.Inicio), "dddd, dd/MM/yyyy");
+            AgregarColumnaHorario("Turno", nameof(TurnoProgramado.Nombre), "");
+            AgregarColumnaHorario("Entrada", nameof(TurnoProgramado.Inicio), "HH:mm");
+            AgregarColumnaHorario("Salida", nameof(TurnoProgramado.Fin), "HH:mm");
+            tablaHorarios.Columns["Día"].FillWeight = 175;
+            tablaHorarios.Columns["Turno"].FillWeight = 130;
+            contenido.Controls.Add(tablaHorarios, 0, 2);
+
+            var pie = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+            pie.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            pie.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132));
+            TemaAplicacion.DefinirRol(estadoHorarios, RolTema.TextoSecundario);
+            pie.Controls.Add(estadoHorarios, 0, 0);
+            actualizarHorarios.Dock = DockStyle.Fill;
+            pie.Controls.Add(actualizarHorarios, 1, 0);
+            contenido.Controls.Add(pie, 0, 3);
+            return contenido;
+        }
+
+        private void AgregarColumnaHorario(string titulo, string propiedad, string formato)
+        {
+            tablaHorarios.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                HeaderText = titulo,
+                DataPropertyName = propiedad,
+                Name = titulo,
+                DefaultCellStyle = new DataGridViewCellStyle { Format = formato }
+            });
+        }
+
+        private Control CrearPaginaNovedades()
+        {
+            var contenido = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5,
+                Padding = new Padding(24), Margin = Padding.Empty
+            };
+            contenido.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 214));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            contenido.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            TemaAplicacion.DefinirRol(contenido, RolTema.Superficie);
+
+            contenido.Controls.Add(Etiqueta("Quejas y novedades", 25, FontStyle.Bold), 0, 0);
+            var descripcion = Etiqueta("Envía una solicitud laboral al administrador y consulta su estado. No incluyas datos clínicos de pacientes.", 10);
+            TemaAplicacion.DefinirRol(descripcion, RolTema.TextoSecundario);
+            contenido.Controls.Add(descripcion, 0, 1);
+
+            var formulario = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 4, Padding = new Padding(12) };
+            formulario.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+            formulario.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 29));
+            formulario.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 29));
+            formulario.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            formulario.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            formulario.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            formulario.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            TemaAplicacion.DefinirRol(formulario, RolTema.Superficie);
+            AgregarCampoNovedad(formulario, "Tipo de reporte", tipoNovedad, 0);
+            AgregarCampoNovedad(formulario, "Desde", fechaNovedad, 1);
+            AgregarCampoNovedad(formulario, "Hasta (opcional)", fechaFinNovedad, 2);
+            var encabezadoMotivo = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+            encabezadoMotivo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            encabezadoMotivo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68));
+            var etiquetaMotivo = Etiqueta("Describe la queja o novedad", 9);
+            TemaAplicacion.DefinirRol(etiquetaMotivo, RolTema.TextoSecundario);
+            TemaAplicacion.DefinirRol(contadorNovedad, RolTema.TextoSecundario);
+            encabezadoMotivo.Controls.Add(etiquetaMotivo, 0, 0);
+            encabezadoMotivo.Controls.Add(contadorNovedad, 1, 0);
+            formulario.Controls.Add(encabezadoMotivo, 0, 2);
+            formulario.SetColumnSpan(encabezadoMotivo, 3);
+            motivoNovedad.AccessibleName = "Descripción de la queja o novedad";
+            motivoNovedad.MaxLength = 200;
+            motivoNovedad.Margin = new Padding(0, 2, 8, 0);
+            TemaAplicacion.DefinirRol(motivoNovedad, RolTema.Entrada);
+            formulario.Controls.Add(motivoNovedad, 0, 3);
+            formulario.SetColumnSpan(motivoNovedad, 3);
+            contenido.Controls.Add(formulario, 0, 2);
+
+            tablaNovedades.Dock = DockStyle.Fill;
+            tablaNovedades.ReadOnly = true;
+            tablaNovedades.AllowUserToAddRows = false;
+            tablaNovedades.AllowUserToDeleteRows = false;
+            tablaNovedades.AllowUserToResizeRows = false;
+            tablaNovedades.AutoGenerateColumns = false;
+            tablaNovedades.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            tablaNovedades.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            tablaNovedades.RowHeadersVisible = false;
+            tablaNovedades.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            tablaNovedades.MultiSelect = false;
+            tablaNovedades.BorderStyle = BorderStyle.None;
+            tablaNovedades.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            tablaNovedades.EnableHeadersVisualStyles = false;
+            tablaNovedades.ColumnHeadersDefaultCellStyle.Padding = new Padding(8);
+            tablaNovedades.DefaultCellStyle.Padding = new Padding(8);
+            tablaNovedades.RowTemplate.Height = 38;
+            tablaNovedades.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
+            tablaNovedades.AccessibleName = "Mis quejas y novedades";
+            AgregarColumnaNovedad("Tipo", "", "");
+            AgregarColumnaNovedad("Desde", nameof(Novedad.FechaInicio), "dd/MM/yyyy");
+            AgregarColumnaNovedad("Hasta", nameof(Novedad.FechaFin), "dd/MM/yyyy");
+            AgregarColumnaNovedad("Estado", nameof(Novedad.EstadoAprobacion), "");
+            AgregarColumnaNovedad("Descripción", nameof(Novedad.Motivo), "");
+            tablaNovedades.Columns["Tipo"].FillWeight = 90;
+            tablaNovedades.Columns["Desde"].FillWeight = 70;
+            tablaNovedades.Columns["Hasta"].FillWeight = 70;
+            tablaNovedades.Columns["Estado"].FillWeight = 80;
+            tablaNovedades.Columns["Descripción"].FillWeight = 190;
+            tablaNovedades.Columns["Descripción"].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            tablaNovedades.CellFormatting += (sender, args) =>
+            {
+                if (args.RowIndex < 0 || args.ColumnIndex < 0 || tablaNovedades.Columns[args.ColumnIndex].Name != "Estado") return;
+                string valor = Convert.ToString(args.Value)?.Trim().ToUpperInvariant();
+                if (valor == "APROBADO") args.CellStyle.ForeColor = TemaAplicacion.Actual.AcentoVerde;
+                else if (valor == "RECHAZADO") args.CellStyle.ForeColor = TemaAplicacion.Actual.Error;
+                else if (valor == "PENDIENTE") args.CellStyle.ForeColor = TemaAplicacion.Actual.AcentoNaranja;
+                args.CellStyle.Font = FuenteEstadoNovedad;
+            };
+            contenido.Controls.Add(tablaNovedades, 0, 3);
+
+            var pie = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+            pie.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            pie.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 116));
+            pie.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+            TemaAplicacion.DefinirRol(estadoNovedades, RolTema.TextoSecundario);
+            pie.Controls.Add(estadoNovedades, 0, 0);
+            actualizarNovedades.Dock = enviarNovedad.Dock = DockStyle.Fill;
+            pie.Controls.Add(actualizarNovedades, 1, 0);
+            pie.Controls.Add(enviarNovedad, 2, 0);
+            contenido.Controls.Add(pie, 0, 4);
+            return contenido;
+        }
+
+        private void AgregarCampoNovedad(TableLayoutPanel layout, string titulo, Control campo, int columna)
+        {
+            var etiqueta = Etiqueta(titulo, 9);
+            TemaAplicacion.DefinirRol(etiqueta, RolTema.TextoSecundario);
+            layout.Controls.Add(etiqueta, columna, 0);
+            campo.Margin = new Padding(0, 2, 8, 0);
+            campo.AccessibleName = titulo;
+            TemaAplicacion.DefinirRol(campo, RolTema.Entrada);
+            layout.Controls.Add(campo, columna, 1);
+        }
+
+        private void AgregarColumnaNovedad(string titulo, string propiedad, string formato)
+        {
+            tablaNovedades.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                HeaderText = titulo,
+                DataPropertyName = propiedad,
+                Name = titulo,
+                DefaultCellStyle = new DataGridViewCellStyle { Format = formato }
+            });
+        }
+
+        private void MostrarPaginaAsistencia()
+        {
+            paginaAsistencia.BringToFront();
+            botonAsistencia.Principal = true;
+            botonHorarios.Principal = false;
+            botonNovedades.Principal = false;
+            botonAsistencia.Invalidate();
+            botonHorarios.Invalidate();
+            botonNovedades.Invalidate();
+        }
+
+        private void MostrarPaginaHorarios()
+        {
+            paginaHorarios.BringToFront();
+            botonAsistencia.Principal = false;
+            botonHorarios.Principal = true;
+            botonNovedades.Principal = false;
+            botonAsistencia.Invalidate();
+            botonHorarios.Invalidate();
+            botonNovedades.Invalidate();
+        }
+
+        private void MostrarPaginaNovedades()
+        {
+            paginaNovedades.BringToFront();
+            botonAsistencia.Principal = false;
+            botonHorarios.Principal = false;
+            botonNovedades.Principal = true;
+            botonAsistencia.Invalidate();
+            botonHorarios.Invalidate();
+            botonNovedades.Invalidate();
+        }
+
+        private async Task CargarHorariosAsync()
+        {
+            if (consultaTurnos == null)
+            {
+                tablaHorarios.DataSource = null;
+                estadoHorarios.Text = "La consulta de horarios no está disponible en esta versión.";
+                return;
+            }
+
+            actualizarHorarios.Enabled = false;
+            estadoHorarios.Text = "Consultando tus horarios...";
+            tablaHorarios.DataSource = null;
+            try
+            {
+                DateTime inicio = PlanificacionTurnos.AhoraColombia;
+                DateTime fin = inicio.Date.AddDays(31);
+                var turnos = await consultaTurnos.ConsultarTurnosAsync(sesion.IdEmpleado, inicio, fin);
+                if (IsDisposed) return;
+                tablaHorarios.DataSource = turnos;
+                tablaHorarios.ClearSelection();
+                estadoHorarios.Text = turnos.Count == 0
+                    ? "No tienes turnos asignados en los próximos 30 días."
+                    : turnos.Count + " turnos asignados en los próximos 30 días.";
+            }
+            catch (Exception)
+            {
+                if (!IsDisposed) estadoHorarios.Text = "No se pudieron consultar tus horarios. Comprueba la conexión e inténtalo de nuevo.";
+            }
+            finally
+            {
+                if (!IsDisposed) actualizarHorarios.Enabled = true;
+            }
+        }
+
+        private async Task CargarNovedadesAsync()
+        {
+            actualizarNovedades.Enabled = enviarNovedad.Enabled = false;
+            estadoNovedades.Text = "Cargando tus reportes...";
+            try
+            {
+                int tipoAnterior = 0;
+                if (tipoNovedad.SelectedValue != null)
+                    int.TryParse(Convert.ToString(tipoNovedad.SelectedValue), out tipoAnterior);
+                var tipos = await consulta.ConsultarTiposNovedadAsync();
+                var novedades = await consulta.ConsultarNovedadesAsync(sesion.IdEmpleado);
+                if (IsDisposed) return;
+                tipoNovedad.DataSource = tipos;
+                tipoNovedad.DisplayMember = nameof(TipoNovedad.NombreTipo);
+                tipoNovedad.ValueMember = nameof(TipoNovedad.IdTipoNovedad);
+                if (tipoAnterior > 0 && tipos.Any(tipo => tipo.IdTipoNovedad == tipoAnterior))
+                    tipoNovedad.SelectedValue = tipoAnterior;
+                tablaNovedades.DataSource = novedades;
+                foreach (DataGridViewRow fila in tablaNovedades.Rows)
+                    if (fila.DataBoundItem is Novedad novedad)
+                        fila.Cells["Tipo"].Value = novedad.TipoNovedad?.NombreTipo ?? "Sin tipo";
+                enviarNovedad.Enabled = tipos.Count > 0;
+                estadoNovedades.Text = tipos.Count == 0
+                    ? "No hay tipos configurados. Solicita al administrador que registre uno en Tipos de novedad."
+                    : novedades.Count == 0 ? "Aún no has enviado reportes."
+                    : "Total: " + novedades.Count + "  ·  Pendientes: " + novedades.Count(n => string.Equals(n.EstadoAprobacion, "Pendiente", StringComparison.OrdinalIgnoreCase))
+                        + "  ·  Aprobados: " + novedades.Count(n => string.Equals(n.EstadoAprobacion, "Aprobado", StringComparison.OrdinalIgnoreCase))
+                        + "  ·  Rechazados: " + novedades.Count(n => string.Equals(n.EstadoAprobacion, "Rechazado", StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception)
+            {
+                if (!IsDisposed)
+                    estadoNovedades.Text = "No se pudo cargar la información. Comprueba la conexión y pulsa Actualizar.";
+            }
+            finally
+            {
+                if (!IsDisposed) actualizarNovedades.Enabled = true;
+            }
+        }
+
+        private async Task EnviarNovedadAsync()
+        {
+            var tipo = tipoNovedad.SelectedItem as TipoNovedad;
+            if (tipo == null)
+            {
+                estadoNovedades.Text = "Selecciona un tipo de queja o novedad.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(motivoNovedad.Text))
+            {
+                estadoNovedades.Text = "Escribe una descripción antes de enviar.";
+                motivoNovedad.Focus();
+                return;
+            }
+            if (fechaFinNovedad.Checked && fechaFinNovedad.Value.Date < fechaNovedad.Value.Date)
+            {
+                estadoNovedades.Text = "La fecha Hasta no puede ser anterior a Desde.";
+                fechaFinNovedad.Focus();
+                return;
+            }
+
+            enviarNovedad.Enabled = actualizarNovedades.Enabled = false;
+            estadoNovedades.Text = "Enviando al administrador...";
+            try
+            {
+                await consulta.EnviarNovedadAsync(sesion.IdEmpleado, tipo.IdTipoNovedad,
+                    fechaNovedad.Value.Date, fechaFinNovedad.Checked ? fechaFinNovedad.Value.Date : (DateTime?)null,
+                    motivoNovedad.Text);
+                if (IsDisposed) return;
+                motivoNovedad.Clear();
+                await CargarNovedadesAsync();
+                if (!IsDisposed) estadoNovedades.Text = "Tu reporte se envió como Pendiente y ya está disponible para el administrador.";
+            }
+            catch (Exception error) when (error is ArgumentException || error is InvalidOperationException)
+            {
+                if (!IsDisposed) estadoNovedades.Text = error.Message;
+            }
+            catch (Exception)
+            {
+                if (!IsDisposed) estadoNovedades.Text = "No se pudo enviar. Comprueba la conexión e inténtalo de nuevo.";
+            }
+            finally
+            {
+                if (!IsDisposed)
+                {
+                    actualizarNovedades.Enabled = true;
+                    enviarNovedad.Enabled = tipoNovedad.Items.Count > 0;
+                }
+            }
         }
 
         private Control CrearAccionesMarcacion()

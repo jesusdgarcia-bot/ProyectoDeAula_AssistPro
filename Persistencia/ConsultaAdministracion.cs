@@ -170,7 +170,8 @@ namespace Persistencia
         public Task<List<TipoNovedad>> ListarTiposNovedadAsync() => ListarAsync(c => c.TiposNovedad.OrderBy(t => t.NombreTipo));
         public Task<List<Novedad>> ListarNovedadesAsync() =>
             ListarAsync(c => c.Novedades.Include(n => n.Empleado).Include(n => n.TipoNovedad)
-                .OrderByDescending(n => n.FechaInicio).ThenByDescending(n => n.IdNovedad));
+                .OrderBy(n => n.EstadoAprobacion == "Pendiente" ? 0 : 1)
+                .ThenByDescending(n => n.FechaInicio).ThenByDescending(n => n.IdNovedad));
         public Task<List<PlantillaAdministrada>> ListarPlantillasAsync() =>
             ListarAsync(c => c.PlantillasBiometricas.OrderByDescending(p => p.FechaRegistro).Select(p => new PlantillaAdministrada
             {

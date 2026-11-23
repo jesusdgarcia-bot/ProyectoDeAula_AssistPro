@@ -10,6 +10,65 @@ namespace Persistencia
 {
     public sealed class ConsultaAsistencia : IConsultaAsistencia, IConsultaTurnos
     {
+        public async Task<List<TipoNovedad>> ConsultarTiposNovedadAsync()
+        {
+            using (var contexto = new AssistProContext())
+            {
+                contexto.Configuration.LazyLoadingEnabled = false;
+                contexto.Configuration.ProxyCreationEnabled = false;
+                return await contexto.TiposNovedad.AsNoTracking()
+                    .OrderBy(tipo => tipo.NombreTipo)
+                    .ToListAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task<List<Novedad>> ConsultarNovedadesAsync(int idEmpleado)
+        {
+            if (idEmpleado <= 0) throw new ArgumentOutOfRangeException(nameof(idEmpleado));
+            using (var contexto = new AssistProContext())
+            {
+                contexto.Configuration.LazyLoadingEnabled = false;
+                contexto.Configuration.ProxyCreationEnabled = false;
+                return await contexto.Novedades.AsNoTracking()
+                    .Include(novedad => novedad.TipoNovedad)
+                    .Where(novedad => novedad.IdEmpleado == idEmpleado)
+                    .OrderByDescending(novedad => novedad.FechaInicio)
+                    .ThenByDescending(novedad => novedad.IdNovedad)
+                    .Take(100)
+                    .ToListAsync().ConfigureAwait(false);
+            }
+        }
+
+        public async Task EnviarNovedadAsync(int idEmpleado, int idTipoNovedad, DateTime fechaInicio,
+            DateTime? fechaFin, string motivo)
+        {
+            if (idEmpleado <= 0) throw new ArgumentOutOfRangeException(nameof(idEmpleado));
+            if (idTipoNovedad <= 0) throw new ArgumentOutOfRangeException(nameof(idTipoNovedad));
+            if (fechaFin.HasValue && fechaFin.Value.Date < fechaInicio.Date)
+                throw new ArgumentException("La fecha final no puede ser anterior a la fecha inicial.");
+            if (string.IsNullOrWhiteSpace(motivo) || motivo.Trim().Length > 200)
+                throw new ArgumentException("Escribe una descripción de hasta 200 caracteres.", nameof(motivo));
+
+            using (var contexto = new AssistProContext())
+            {
+                bool tipoExiste = await contexto.TiposNovedad.AsNoTracking()
+                    .AnyAsync(tipo => tipo.IdTipoNovedad == idTipoNovedad).ConfigureAwait(false);
+                if (!tipoExiste) throw new InvalidOperationException("El tipo seleccionado ya no está disponible. Actualiza la lista.");
+
+                contexto.Novedades.Add(new Novedad
+                {
+                    IdEmpleado = idEmpleado,
+                    IdTipoNovedad = idTipoNovedad,
+                    FechaInicio = fechaInicio.Date,
+                    FechaFin = fechaFin?.Date,
+                    Motivo = motivo.Trim(),
+                    EstadoAprobacion = "Pendiente",
+                    IdUsuarioAprueba = null
+                });
+                await contexto.SaveChangesAsync().ConfigureAwait(false);
+            }
+        }
+
         public Task<List<RegistroAsistencia>> ConsultarAsync(int idEmpleado, DateTime desde, DateTime hasta)
         {
             return ConsultarRegistrosAsync(desde, hasta, idEmpleado);

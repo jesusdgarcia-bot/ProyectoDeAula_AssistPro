@@ -18,7 +18,7 @@ namespace WindowsForms_Presentacion
         private const string ModuloMarcaciones = "Marcaciones";
         private const string ModuloTurnos = "Turnos";
         private const string ModuloAsignaciones = "Asignación de turnos";
-        private const string ModuloNovedades = "Novedades laborales";
+        private const string ModuloNovedades = "Quejas y novedades";
         private const string ModuloTiposNovedad = "Tipos de novedad";
         private const string ModuloSedes = "Sedes";
         private const string ModuloUnidades = "Unidades y servicios";

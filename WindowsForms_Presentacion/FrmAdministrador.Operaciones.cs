@@ -50,9 +50,10 @@ namespace WindowsForms_Presentacion
                 }, () => AsignarHorarioAsync(), editar: AsignarHorarioAsync,
                 eliminar: asignacion => consulta.EliminarAsync<EmpleadoHorario>(sesion, asignacion.IdEmpleadoHorario),
                 textoAgregar: "Asignar turno");
-            AgregarVista(ModuloNovedades, new[] { "Personal", "Tipo", "Desde", "Hasta", "Estado", "Motivo" },
+            AgregarVista(ModuloNovedades, new[] { "N.º", "Personal", "Tipo de reporte", "Desde", "Hasta", "Estado", "Descripción" },
                 consulta.ListarNovedadesAsync, novedad => new object[]
                 {
+                    novedad.IdNovedad,
                     NombreEmpleado(novedad.Empleado), novedad.TipoNovedad?.NombreTipo,
                     novedad.FechaInicio.ToString("dd/MM/yyyy"), novedad.FechaFin?.ToString("dd/MM/yyyy"),
                     novedad.EstadoAprobacion, novedad.Motivo
